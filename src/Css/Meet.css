@@ -1,0 +1,388 @@
+/* --- Biến màu CSS --- */
+:root {
+  --bg-color: #202124;
+  --surface-color: #3c4043;
+  --primary-text-color: #e8eaed;
+  --secondary-text-color: #bdc1c6;
+  --accent-color: #8ab4f8;
+  --control-bg-color: rgba(60, 64, 67, 0.85); /* Hơi đậm hơn */
+  --control-icon-color: #e8eaed;
+  --danger-color: #ea4335;
+  --border-radius: 12px;
+  --shadow: 0 4px 15px rgba(0, 0, 0, 0.25); /* Rõ hơn chút */
+  --icon-button-hover-bg: rgba(255, 255, 255, 0.1);
+  --message-sent-bg: var(--accent-color);
+  --message-sent-text: #202124;
+  --message-received-bg: #5f6368;
+  --focus-outline-color: var(--accent-color); /* Màu outline khi focus */
+}
+
+/* --- Reset & Body --- */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; } /* Cuộn mượt */
+
+body {
+  margin: 0;
+  font-family: 'Roboto', sans-serif;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: var(--bg-color);
+  color: var(--primary-text-color);
+  overflow: hidden;
+  position: relative;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* --- Trạng thái Focus & Disabled --- */
+button:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid var(--focus-outline-color);
+  outline-offset: 2px;
+}
+button:disabled, input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --- Layout Chính --- */
+#main-content {
+  display: flex;
+  flex: 1;
+  width: 100%; /* Chiếm toàn bộ chiều rộng của phần tử cha */
+  height: 100%; /* Chiếm toàn bộ chiều cao của phần tử cha */
+  padding: 0; /* Loại bỏ padding nếu không cần thiết */
+  gap: 12px; /* Khoảng cách giữa các phần tử con */
+  overflow: hidden;
+  box-sizing: border-box;
+}
+/* --- Khu vực Video --- */
+#video-area {
+  flex: 3;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: var(--border-radius);
+  overflow: hidden;
+  background-color: var(--surface-color);
+  box-shadow: var(--shadow);
+  height: calc(100vh - 98px); /* Điều chỉnh chiều cao để vừa khít */
+  margin: 0; /* Loại bỏ khoảng cách thừa */
+  border: 2px solid rgba(255, 255, 255, 0.15)
+}
+
+#virtual-person-video, #user-video {
+  position: relative; /* Cần để định vị các element con tuyệt đối */
+  display: flex; justify-content: center; align-items: center;
+  background-color: var(--surface-color);
+  overflow: hidden; /* Đảm bảo video con không tràn */
+}
+
+#virtual-person-video {
+   width: 100%; height: 100%;
+}
+
+#virtual-person-video video, #user-video video {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+
+#user-video {
+  position: absolute;
+  bottom: 16px; right: 16px; /* Nhất quán padding */
+  width: 25%; max-width: 180px; /* Giảm nhẹ max-width */
+  aspect-ratio: 16 / 9;
+  border-radius: calc(var(--border-radius) / 1.5);
+  z-index: 2;
+  box-shadow: var(--shadow);
+  border: 2px solid rgba(255, 255, 255, 0.15); /* Rõ hơn chút */
+}
+
+/* CSS cho placeholder icon trong user video */
+#user-video .placeholder-icon {
+  font-size: 2.5em;
+  color: var(--secondary-text-color);
+  position: absolute; /* Để nó ở giữa */
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+/* Ẩn placeholder khi video đang hiển thị */
+#user-video video[style*="display: block"] + .placeholder-icon {
+  display: none;
+}
+/* Hiện placeholder khi video ẩn */
+#user-video video[style*="display: none"] + .placeholder-icon {
+  display: block;
+}
+
+
+.video-label {
+  position: absolute; bottom: 6px; left: 10px;
+  font-size: 0.8em; color: rgba(255, 255, 255, 0.95); /* Rõ hơn */
+  background-color: rgba(0, 0, 0, 0.5); /* Đậm hơn */
+  padding: 3px 8px; border-radius: 4px; z-index: 3;
+  pointer-events: none; /* Không bắt sự kiện chuột */
+}
+/* Nhãn cho video người dùng (phải dưới, trái) */
+#user-video .video-label {
+  font-size: 0.75em; bottom: 4px; left: 6px;
+}
+
+.speaking-indicator {
+  position: absolute;
+  top: 10px; /* Điều chỉnh vị trí */
+  right: 10px; /* Đặt ở góc trên bên phải */
+  font-size: 1em;
+  color: #6fcc74;
+  z-index: 4;
+  display: none; /* Ẩn mặc định */
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
+  animation: pulse 1.2s infinite ease-in-out;
+}
+/* Chỉ báo cho user video nhỏ hơn và khác vị trí */
+#user-video .speaking-indicator {
+  font-size: 0.8em;
+  top: 6px;
+  right: 6px;
+}
+
+.speaking-indicator.is-speaking {
+  display: block;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 0.7; }
+  50% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.7; }
+}
+
+/* --- Khu vực Chat --- */
+#chat-container {
+  flex: 1;
+  min-width: 260px; max-width: 380px; /* Tăng nhẹ giới hạn */
+  background-color: var(--surface-color);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow);
+  display: flex; flex-direction: column;
+  overflow-y: auto; /* Để cuộn nếu cần */
+  box-sizing: border-box;
+  border: 2px solid rgba(255, 255, 255, 0.15)
+}
+
+/* --- Thanh Chọn Chế Độ ICON --- */
+#chat-mode-icons {
+  display: flex;
+  justify-content: space-around;
+  padding: 8px 5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+  background-color: rgba(0,0,0,0.1); /* Thêm nền nhẹ */
+}
+
+#chat-mode-icons button {
+  background: none; border: none;
+  color: var(--secondary-text-color);
+  font-size: 1.3em;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 50%;
+  transition: color 0.2s ease, background-color 0.2s ease;
+  line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px; /* Tăng nhẹ kích thước */
+}
+#chat-mode-icons button:hover {
+  background-color: var(--icon-button-hover-bg);
+  color: var(--primary-text-color);
+}
+#chat-mode-icons button.active-mode {
+  color: var(--accent-color);
+  background-color: rgba(138, 180, 248, 0.1); /* Nền nhẹ khi active */
+}
+
+/* --- Chat Messages --- */
+#chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 15px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+  max-height: calc(100vh - 230px); /* Add this line to limit height */
+  min-height: 230px; /* Add this line to ensure minimum height */
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+#chat-messages::-webkit-scrollbar { width: 6px; }
+#chat-messages::-webkit-scrollbar-track { background: transparent; }
+#chat-messages::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.3); border-radius: 3px; }
+
+#chat-messages p {
+  margin-bottom: 10px; /* Tăng khoảng cách */
+  padding: 10px 15px;
+  border-radius: 18px; /* Giữ nguyên bo góc */
+  max-width: 88%; /* Tăng nhẹ */
+  word-wrap: break-word;
+  line-height: 1.45; /* Tăng nhẹ */
+  font-size: 0.95em;
+  position: relative; /* Cho hiệu ứng animation nếu cần */
+}
+#chat-messages p.sent {
+  background-color: var(--message-sent-bg);
+  color: var(--message-sent-text);
+  margin-left: auto;
+  border-bottom-right-radius: 5px;
+}
+#chat-messages p.received {
+  background-color: var(--message-received-bg);
+  color: var(--primary-text-color);
+  margin-right: auto;
+  border-bottom-left-radius: 5px;
+}
+
+/* --- Chat Input Area --- */
+#chat-input-area {
+  display: flex;
+  align-items: center;
+  padding: 12px 15px; /* Tăng padding */
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+#message-input {
+  flex: 1;
+  padding: 12px 18px; /* Tăng padding */
+  border: none;
+  border-radius: 22px; /* Đồng bộ hơn */
+  margin-right: 10px;
+  font-size: 0.95em;
+  background-color: #5f6368;
+  color: var(--primary-text-color);
+  outline: none;
+  transition: background-color 0.2s ease;
+}
+#message-input::placeholder { color: var(--secondary-text-color); }
+#message-input:focus {
+  background-color: #6a6e73; /* Sáng hơn khi focus */
+}
+
+#send-button {
+  padding: 0; /* Bỏ padding, dùng width/height */
+  background-color: var(--accent-color);
+  color: var(--message-sent-text);
+  border: none; border-radius: 50%; cursor: pointer;
+  font-size: 1.1em;
+  width: 44px; height: 44px; /* Đồng bộ kích thước */
+  display: flex; justify-content: center; align-items: center;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+  flex-shrink: 0;
+}
+#send-button:hover { background-color: #a1c6fd; }
+#send-button:active { transform: scale(0.95); } /* Hiệu ứng nhấn */
+
+/* --- Khu vực Controls --- */
+#controls {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  padding: 10px 0; /* Giảm padding để sát hơn */
+  background-color: var(--surface-color);
+  z-index: 10;
+  box-sizing: border-box;
+}
+
+.controls-container {
+  display: flex; gap: 15px;
+  background-color: var(--control-bg-color);
+  padding: 12px 25px; /* Tăng padding */
+  border-radius: 30px; /* Bo tròn hơn */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4); /* Shadow rõ hơn */
+  align-items: center;
+  pointer-events: auto; /* Bắt sự kiện */
+}
+
+#controls button {
+  background-color: transparent;
+  color: var(--control-icon-color);
+  border: none; border-radius: 50%; cursor: pointer;
+  font-size: 1.25em; /* To hơn chút */
+  width: 50px; height: 50px; /* To hơn chút */
+  display: flex; justify-content: center; align-items: center;
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.1s ease;
+  flex-shrink: 0;
+  position: relative; /* Cho tooltip hoặc element con nếu cần */
+}
+#controls button:hover { background-color: var(--icon-button-hover-bg); }
+#controls button:active { transform: scale(0.92); }
+
+#call-toggle { background-color: var(--danger-color); color: white; }
+#call-toggle:hover { background-color: #d03022; }
+
+#controls button i {
+  color: var(--control-icon-color); /* Màu mặc định của icon */
+  transition: color 0.2s ease;
+}
+
+#controls button.off i {
+  color: #ea4335; /* Màu đỏ khi tắt */
+}
+
+#controls button:hover i {
+  color: #ffffff; /* Màu trắng khi hover */
+}
+
+#cv-upload-input { display: none; }
+
+/* --- Responsive --- */
+@media (max-width: 768px) {
+  body { height: auto; min-height: 100vh; overflow: visible; }
+  #main-content {
+    display: flex;
+    flex: 1;
+    padding: 16px 20px; /* Tăng padding hai bên */
+    gap: 20px; /* Tăng khoảng cách giữa video và chat */
+    overflow: hidden;
+    box-sizing: border-box;
+    padding-bottom: 90px; /* Khoảng trống cho controls */
+  }
+  #video-area { flex: none; height: clamp(200px, 50vh, 350px); } /* Giới hạn chiều cao */
+  #user-video { width: 30%; max-width: 120px; bottom: 10px; right: 10px; border-width: 1px; }
+  #chat-container { flex: 1; max-width: 100%; height: auto; min-height: 200px; max-height: 45vh; } /* Điều chỉnh chiều cao chat */
+
+  .video-label { font-size: 0.7em; padding: 2px 5px; bottom: 4px; left: 6px; }
+  #user-video .video-label { font-size: 0.65em; bottom: 3px; left: 4px; }
+   .speaking-indicator { font-size: 0.9em; top: 6px; right: 6px; }
+   #user-video .speaking-indicator { font-size: 0.7em; top: 4px; right: 4px;}
+
+  #chat-mode-icons { padding: 6px 5px; }
+  #chat-mode-icons button { font-size: 1.2em; width: 34px; height: 34px; padding: 5px; }
+
+   #message-input { padding: 10px 15px; border-radius: 20px; }
+   #send-button { width: 40px; height: 40px; }
+
+  #controls { padding: 10px 0; background: linear-gradient(to top, rgba(32, 33, 36, 1), rgba(32, 33, 36, 0.9)); } /* Đậm hơn trên mobile */
+  .controls-container { padding: 10px 15px; gap: 10px; border-radius: 25px; flex-wrap: wrap; justify-content: center; }
+  #controls button { width: 44px; height: 44px; font-size: 1.1em; }
+}
+.nav-button {
+  padding: 10px 20px;
+  border: 2px solid transparent;
+  background-color: black;
+  color: black;
+  cursor: pointer;
+  transition: border-color 0.3s ease;
+}
+
+.nav-button:hover {
+  border-color: lightgray;
+}
+
+.nav-button.active {
+  border-color: blue; /* Viền màu xanh khi được chọn */
+  color: blue; /* Thay đổi màu chữ nếu cần */
+}

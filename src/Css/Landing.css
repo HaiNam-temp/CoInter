@@ -1,0 +1,122 @@
+/* Nav Styles */
+.nav-landing {
+    background-color: white;
+    border-bottom: 1px solid white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    height: 4rem; /* 16px x 4 = 64px */
+    display: flex;
+    align-items: center;
+  }
+  
+  .nav-container {
+    max-width: 1120px; /* Tailwind's max-w-7xl */
+    margin: 0 auto;
+    padding: 0 1rem; /* Tailwind's px-4 */
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .nav-title {
+    text-align: center;
+    font-size: 2.25rem; /* Tailwind's text-4xl */
+    font-weight: bold;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    background-image: linear-gradient(to right, #3b82f6, #a855f7, #ec4899);
+  }
+  
+  /* Main Content Styles */
+  .main-landing {
+    background-color: white;
+    min-height: calc(100vh - 4rem); /* Full height minus nav height */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem; /* Tailwind's px-4 */
+  }
+  
+  .grid-container {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2rem; /* Tailwind's gap-8 */
+    max-width: 1120px; /* Tailwind's max-w-6xl */
+    width: 100%;
+  }
+  
+  @media (min-width: 768px) {
+    .grid-container {
+      grid-template-columns: 1fr 1fr; /* Tailwind's md:grid-cols-2 */
+    }
+  }
+  
+  /* Left Section Styles */
+  .left-section {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    text-align: left;
+    padding: 1rem; /* Tailwind's px-4 */
+  }
+  
+  .left-title {
+    font-size: 2.25rem; /* Tailwind's text-4xl */
+    font-weight: bold;
+    color: #1f2937; /* Tailwind's text-gray-800 */
+    margin-bottom: 1rem; /* Tailwind's mb-4 */
+  }
+  
+  .left-description {
+    font-size: 1.125rem; /* Tailwind's text-lg */
+    color: #4b5563; /* Tailwind's text-gray-600 */
+    margin-bottom: 1.5rem; /* Tailwind's mb-6 */
+  }
+  
+  .left-button {
+    background-color: #2563eb; /* Tailwind's bg-blue-600 */
+    color: white;
+    padding: 0.75rem 1.5rem; /* Tailwind's py-3 px-6 */
+    border-radius: 0.5rem; /* Tailwind's rounded-lg */
+    font-size: 1.125rem; /* Tailwind's text-lg */
+    transition: background-color 0.3s;
+  }
+  
+  .left-button:hover {
+    background-color: #1d4ed8; /* Tailwind's hover:bg-blue-700 */
+  }
+  
+  /* Right Section Styles */
+  .right-section {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background-color: white;
+    border: 1px solid white;
+    border-radius: 0.5rem; /* Tailwind's rounded-lg */
+    padding: 1.5rem; /* Tailwind's p-6 */
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Tailwind's shadow-md */
+  }
+  
+  .right-title {
+    font-size: 1.5rem; /* Tailwind's text-2xl */
+    font-weight: bold;
+    color: #1f2937; /* Tailwind's text-gray-800 */
+    margin-bottom: 1rem; /* Tailwind's mb-4 */
+  }
+  
+  .right-button {
+    background-color: #2563eb; /* Tailwind's bg-blue-600 */
+    color: white;
+    padding: 0.75rem 1.5rem; /* Tailwind's py-3 px-6 */
+    border-radius: 0.5rem; /* Tailwind's rounded-lg */
+    font-size: 1.125rem; /* Tailwind's text-lg */
+    transition: background-color 0.3s;
+  }
+  
+  .right-button:hover {
+    background-color: #1d4ed8; /* Tailwind's hover:bg-blue-700 */
+  }

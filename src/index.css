@@ -1,0 +1,6 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+:root {
+    --surface-color: #2d2d2d; /* Màu nền mong muốn */
+  }
