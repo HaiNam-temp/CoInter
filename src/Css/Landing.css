@@ -9,23 +9,26 @@
   }
   
   .nav-container {
-    max-width: 1120px; /* Tailwind's max-w-7xl */
+    max-width: 1536px;
     margin: 0 auto;
-    padding: 0 1rem; /* Tailwind's px-4 */
+    padding: 0; /* Remove all padding */
+    padding-right: 1rem; /* Only add padding on the right side */
     width: 100%;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    height: 4rem;
   }
   
   .nav-title {
-    text-align: center;
-    font-size: 2.25rem; /* Tailwind's text-4xl */
+    text-align: left; /* Change from center to left */
+    font-size: 2.25rem;
     font-weight: bold;
-    background-clip: text;
-    -webkit-background-clip: text;
-    color: transparent;
-    background-image: linear-gradient(to right, #3b82f6, #a855f7, #ec4899);
+    color: #3574d9; /* Replace gradient with solid blue color */
+    margin: 0;
+    padding-left: 1rem;
+    background-clip: initial;
+    -webkit-background-clip: initial;
   }
   
   /* Main Content Styles */
@@ -34,21 +37,28 @@
     min-height: calc(100vh - 4rem); /* Full height minus nav height */
     display: flex;
     align-items: center;
-    justify-content: center;
-    padding: 1rem; /* Tailwind's px-4 */
+    justify-content: flex-start; /* Change from center to flex-start */
+    padding: 1rem; /* Keep padding on top/bottom */
+    padding-left: 0; /* Remove left padding */
+    width: 100%;
+    padding: 0; /* Remove any padding */
   }
   
   .grid-container {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
     gap: 2rem; /* Tailwind's gap-8 */
-    max-width: 1120px; /* Tailwind's max-w-6xl */
     width: 100%;
+    padding-left: 0;
+    padding-right: 0;
+    margin: 0; /* Remove auto margins */
+    max-width: none; /* Remove max-width constraint */
+    align-items: flex-start; /* This is the key change */
   }
   
   @media (min-width: 768px) {
     .grid-container {
-      grid-template-columns: 1fr 1fr; /* Tailwind's md:grid-cols-2 */
+      grid-template-columns: 1fr 1fr; /* Equal 50/50 split */
     }
   }
   
@@ -56,27 +66,37 @@
   .left-section {
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    align-items: flex-start;
-    text-align: left;
-    padding: 1rem; /* Tailwind's px-4 */
+    align-items: flex-start; /* Align items to the start (top) */
+    justify-content: flex-start; /* Justify content to the start (top) */
+    padding: 1.5rem;
+    padding-left: 5rem !important; /* Add minimal padding for readability */
+    padding: 2rem; /* Add consistent padding inside sections */
+    margin-top: 6rem !important; /* Add space at the top to push section down */
+    position: relative; /* Add position relative for absolute positioning */
+  }
+
+  /* Remove the full-width line from the section */
+  .left-section::after {
+    content: none; /* Disable the existing line */
   }
   
   .left-title {
-    font-size: 2.25rem; /* Tailwind's text-4xl */
-    font-weight: bold;
-    color: #1f2937; /* Tailwind's text-gray-800 */
-    margin-bottom: 1rem; /* Tailwind's mb-4 */
+    font-size: 3rem;
+    color: #2a3247; /* Darker, richer black for more contrast */
+    margin-bottom: 0.3rem;
+    text-align: left;
+    line-height: 1.1; /* Tighter line height for closer text */
+    max-width: 100%; /* Allow the title to use most of the container width */
   }
   
   .left-description {
-    font-size: 1.125rem; /* Tailwind's text-lg */
+    font-size: 1.5em; /* Tailwind's text-lg */
     color: #4b5563; /* Tailwind's text-gray-600 */
     margin-bottom: 1.5rem; /* Tailwind's mb-6 */
   }
   
   .left-button {
-    background-color: #2563eb; /* Tailwind's bg-blue-600 */
+    background-color: #b6c1d8; /* Tailwind's bg-blue-600 */
     color: white;
     padding: 0.75rem 1.5rem; /* Tailwind's py-3 px-6 */
     border-radius: 0.5rem; /* Tailwind's rounded-lg */
@@ -87,8 +107,43 @@
   .left-button:hover {
     background-color: #1d4ed8; /* Tailwind's hover:bg-blue-700 */
   }
+  .left-subtitle {
+    font-size: 1.25rem;
+    color: #6b7280; /* Keep the gray color for the subtitle */
+    margin-bottom: 1.25rem;
+    text-align: left;
+    font-weight: normal;
+    max-width: 80%; /* Make the subtitle narrower than the title */
+  }
   
-  /* Right Section Styles */
+  /* Add a bottom line to the left section */
+.left-section {
+  position: relative; /* Make sure position is relative for absolute positioning */
+  display: flex;
+  flex-direction: column;
+}
+
+.left-section::after {
+  content: '';
+  position: absolute;
+  bottom: 0; /* Position at bottom of container */
+  left: 80px; /* Align with the left edge */
+  width: calc(100% - 8rem); /* Match approximate title width - adjust as needed */
+  height: 2px; /* Increased from 1px to 2px for thickness */
+  background-color: #9ca3af; /* Darker gray color */
+}
+
+.title-width-divider {
+  position: absolute;
+  bottom: 0;
+  left: 20;
+  width: calc(100% - 8rem); /* Adjust width to match title */
+  height: 2px; /* Increased thickness */
+  background-color: #9ca3af; /* Darker gray color */
+  margin-top: auto; /* Push to bottom */
+}
+
+/* Right Section Styles */
   .right-section {
     display: flex;
     flex-direction: column;
@@ -97,26 +152,353 @@
     background-color: white;
     border: 1px solid white;
     border-radius: 0.5rem; /* Tailwind's rounded-lg */
-    padding: 1.5rem; /* Tailwind's p-6 */
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Tailwind's shadow-md */
+    padding: 2rem; /* Add consistent padding inside sections */
+    box-shadow: none; /* Remove the shadow */
   }
   
   .right-title {
     font-size: 1.5rem; /* Tailwind's text-2xl */
     font-weight: bold;
-    color: #1f2937; /* Tailwind's text-gray-800 */
+    color: #090c10; /* Tailwind's text-gray-800 */
     margin-bottom: 1rem; /* Tailwind's mb-4 */
   }
   
   .right-button {
-    background-color: #2563eb; /* Tailwind's bg-blue-600 */
+    background-color: #3574d9; /* Tailwind's bg-blue-600 */
     color: white;
-    padding: 0.75rem 1.5rem; /* Tailwind's py-3 px-6 */
-    border-radius: 0.5rem; /* Tailwind's rounded-lg */
-    font-size: 1.125rem; /* Tailwind's text-lg */
+    padding: 0.75rem 1.25rem; /* Increased vertical padding from 0.5rem to 0.75rem */
+    padding-left: 0.75rem; /* Also increased left padding for symmetry */
+    border-radius: 2rem; /* Tailwind's rounded-lg */
+    font-size: 0.875rem; /* Reduced from 1rem to 0.875rem */
     transition: background-color 0.3s;
+    display: flex;
+    align-items: center;
+    white-space: nowrap; /* Prevent text wrapping */
+    height: auto; /* Remove fixed height */
+    margin-right: 0.5rem; /* Reduced from 1rem to 0.5rem */
+    flex-shrink: 0; /* Prevent button from shrinking */
+    /* Add a minimum height to ensure it's taller */
+    min-height: 2.75rem; /* This ensures a minimum height */
   }
   
   .right-button:hover {
     background-color: #1d4ed8; /* Tailwind's hover:bg-blue-700 */
   }
+
+  .right-button:hover svg {
+    transform: scale(1.1);
+    transition: transform 0.2s ease;
+  }
+
+  .right-subtitle {
+    font-size: 1rem;
+    color: #6b7280; /* Tailwind gray-500 */
+    margin-bottom: 1.25rem; /* Add space between subtitle and button */
+    text-align: center;
+    font-weight: normal;
+  }
+
+  .right-button svg {
+    width: 1.25rem; /* Reduced from 1.5rem */
+    height: 1.25rem; /* Reduced from 1.5rem */
+    margin-right: 0.375rem; /* Reduced spacing */
+    display: inline-block;
+    vertical-align: middle;
+    transform: translateY(-1px);
+    margin-left: 0.125rem; /* Reduced left margin */
+  }
+
+  /* Keep your existing hover effect */
+  .right-button:hover svg {
+    transform: translateY(-1px) scale(1.1);
+    transition: transform 0.2s ease;
+  }
+
+  /* Resume Upload Section */
+.resume-upload-container {
+  flex: 1; /* Take available space but allow room for button */
+  min-width: 250px; /* Ensure minimum width */
+  max-width: 320px;
+  margin: 0; /* Remove margin since we're using gap in flex container */
+  flex: 1; /* Take remaining space */
+}
+
+.resume-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #13161c;
+  margin-bottom: 0.75rem;
+}
+
+/* Make sure parent container doesn't expand */
+.resume-form {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 100%; /* Don't exceed parent width */
+}
+
+.input-container {
+  display: flex;
+  align-items: center;
+  background-color: white;
+  border: 2px solid #9ba1aa;
+  border-radius: 1rem;
+  padding: 0 0.75rem;
+  flex: 1;
+  min-width: 0; /* This is critical for text truncation to work */
+  max-width: 100%; /* Don't exceed parent width */
+  transition: border-color 0.2s;
+  cursor: pointer; /* Add pointer cursor to show it's clickable */
+}
+
+.input-container:hover {
+  border-color: #3574d9;
+}
+
+/* Improve filename display text truncation */
+.filename-display {
+  flex: 1;
+  padding: 0.75rem 0;
+  color: #4b5563;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0; /* This is important for ellipsis to work */
+}
+
+/* Move file icon to left */
+.file-upload-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #515660;
+  padding-right: 0.75rem;
+  margin-right: 0.25rem; /* Add separator */
+}
+
+.file-icon {
+  font-size: 1.25rem;
+}
+
+/* Keep file input hidden */
+.file-input {
+  display: none;
+}
+
+.resume-input {
+  flex: 1;
+  padding: 0.75rem;
+  border: none;
+  outline: none;
+  font-size: 0.95rem;
+  color: #4b5563;
+  background: transparent;
+}
+
+.file-upload-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0.5rem;
+  color: #515660;
+  transition: color 0.2s;
+}
+
+.file-upload-label:hover {
+  color: #3574d9;
+}
+
+.file-input {
+  display: none;
+}
+
+.file-icon {
+  font-size: 1.25rem;
+}
+
+.submit-button {
+
+  color: rgb(122, 119, 119);
+  padding: rem 1.5rem;
+  border-radius: 0.5rem;
+  font-size: 1rem;
+  font-weight: 500;
+  transition: background-color 0.3s;
+  white-space: nowrap;
+}
+
+/* Make sure the container doesn't reverse on smaller screens */
+@media (max-width: 768px) {
+  .flex-wrap {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem; /* Add smaller gap for mobile */
+  }
+  
+  .right-button {
+    margin-right: 0;
+    margin-bottom: 0.5rem; /* Reduced from 1rem */
+  }
+}
+
+/* Slider Styles */
+.slider {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  min-height: 450px; /* Fixed height for slider container */
+}
+
+.slider-button {
+  background-color: rgba(255, 255, 255, 0.7);
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  color: #4b5563;
+  cursor: pointer;
+  z-index: 10;
+  transition: background-color 0.3s, color 0.3s;
+  position: absolute;
+}
+
+.slider-button:hover {
+  background-color: rgba(255, 255, 255, 0.9);
+  color: #3574d9;
+}
+
+.slider-button.prev {
+  left: 10px;
+}
+
+.slider-button.next {
+  right: 10px;
+}
+
+.slider-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 50px;
+  text-align: center;
+  min-height: 400px; /* Fixed height for content */
+}
+
+.slider-image {
+  width: 300px; /* Fixed width */
+  height: 250px; /* Fixed height */
+  border-radius: 0.5rem;
+  margin-bottom: 1.5rem;
+  object-fit: contain; /* This ensures the image maintains aspect ratio */
+  box-shadow: none; /* Remove shadow from image too */
+}
+
+.slider-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 0.75rem;
+}
+
+.slider-description {
+  font-size: 1rem;
+  color: #6b7280;
+  line-height: 1.6;
+}
+
+.slider-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 1rem;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: #d1d5db;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.dot.active {
+  background-color: #3574d9;
+}
+
+/* Add styles for the button container and underline */
+.meeting-button-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-right: -0.5rem;
+}
+
+
+/* Add a title-wrapper class in your JSX */
+.title-wrapper {
+  position: relative;
+  display: inline-block; /* This makes the container only as wide as the content */
+  margin-bottom: 2rem; /* Add space below the title and line */
+}
+
+/* Add an underline specific to the title */
+.title-wrapper::after {
+  content: '';
+  position: absolute;
+  bottom: -1rem; /* Position it below the title */
+  left: 0;
+  width: 100%; /* This will be 100% of the title width */
+  height: 1px;
+  background-color: #787e8c;
+}
+
+/* Add these animation styles to your CSS file */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutLeft {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+}
+
+/* Add these classes for the text elements */
+.slider-text-container {
+  width: 100%;
+  position: relative;
+  overflow: hidden; /* Ensure content doesn't spill outside */
+}
+
+.slider-title, .slider-description {
+  animation: slideInRight 0.5s forwards;
+}
+
+.slider-content.slide-exit .slider-title,
+.slider-content.slide-exit .slider-description {
+  animation: slideOutLeft 0.5s forwards;
+}

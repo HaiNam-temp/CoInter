@@ -284,26 +284,27 @@ button:disabled, input:disabled {
 
 /* --- Khu vực Controls --- */
 #controls {
-  position: absolute;
-  bottom: 0;
-  left: 0;
+  position: relative; /* Change from absolute to relative */
+  bottom: auto;
+  left: auto;
   width: 100%;
   display: flex;
   justify-content: center;
-  padding: 10px 0; /* Giảm padding để sát hơn */
-  background-color: var(--surface-color);
+  padding: 20px 0; /* Increased padding for more space */
   z-index: 10;
   box-sizing: border-box;
 }
 
 .controls-container {
-  display: flex; gap: 15px;
+  display: flex; 
+  gap: 15px;
   background-color: var(--control-bg-color);
-  padding: 12px 25px; /* Tăng padding */
-  border-radius: 30px; /* Bo tròn hơn */
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4); /* Shadow rõ hơn */
+  padding: 12px 25px;
+  border-radius: 30px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   align-items: center;
-  pointer-events: auto; /* Bắt sự kiện */
+  pointer-events: auto;
+  margin: 0 auto; /* Center the controls */
 }
 
 #controls button {
@@ -365,7 +366,7 @@ button:disabled, input:disabled {
    #message-input { padding: 10px 15px; border-radius: 20px; }
    #send-button { width: 40px; height: 40px; }
 
-  #controls { padding: 10px 0; background: linear-gradient(to top, rgba(32, 33, 36, 1), rgba(32, 33, 36, 0.9)); } /* Đậm hơn trên mobile */
+  #controls { padding: 15px 0; background: linear-gradient(to top, rgba(32, 33, 36, 1), rgba(32, 33, 36, 0.9)); } /* Đậm hơn trên mobile */
   .controls-container { padding: 10px 15px; gap: 10px; border-radius: 25px; flex-wrap: wrap; justify-content: center; }
   #controls button { width: 44px; height: 44px; font-size: 1.1em; }
 }
@@ -385,4 +386,165 @@ button:disabled, input:disabled {
 .nav-button.active {
   border-color: blue; /* Viền màu xanh khi được chọn */
   color: blue; /* Thay đổi màu chữ nếu cần */
+}
+
+/* Full width video layout without chat */
+.full-width-video #video-area {
+  flex: 1;
+  width: 100%; 
+  max-width: 100%;
+  height: calc(100vh - 98px);
+}
+
+/* Larger user video in full-width mode */
+.full-width-video #user-video {
+  width: 30%;
+  max-width: 350px;
+  aspect-ratio: 16 / 9;
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  box-shadow: var(--shadow);
+}
+
+/* 50/50 Split screen layout with spacing */
+.split-screen-video {
+  display: flex;
+  width: 100%;
+  height: calc(100vh - 98px - 80px); /* Reduced height to leave space for controls */
+  overflow: hidden;
+  padding: 20px 20px 0 20px; /* Add padding around the video container */
+}
+
+#video-container {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  gap: 20px; /* Add space between video panels */
+}
+
+.video-panel {
+  flex: 1;
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--surface-color);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow);
+  border: 2px solid rgba(255, 255, 255, 0.15);
+}
+
+#virtual-person-container,
+#user-container {
+  width: 50%; /* Ensure each panel takes exactly 50% width */
+  flex: 0 0 calc(50% - 10px); /* Fixed width with gap compensation */
+}
+
+#virtual-person-video,
+#user-video {
+  width: 100% !important; /* Override any previous width settings */
+  height: 100% !important;
+  position: relative !important; /* Override absolute positioning */
+  max-width: none !important;
+  bottom: auto !important;
+  right: auto !important;
+}
+
+/* Override border radius for user video in split screen */
+.split-screen-video #user-video {
+  border-radius: 0 !important;
+  position: relative !important;
+  aspect-ratio: auto !important;
+}
+
+/* Adjust the speaking indicators to appear in proper positions in each panel */
+#virtual-person-video .speaking-indicator,
+#user-video .speaking-indicator {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  font-size: 1em !important; /* Consistent size for both */
+}
+
+/* Make sure both videos take up entire panel space */
+#virtual-person-video video,
+#user-video video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Responsive adjustments for mobile */
+@media (max-width: 768px) {
+  .split-screen-video {
+    height: calc(100vh - 140px);
+    padding: 10px 10px 0 10px;
+  }
+  
+  #video-container {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  #virtual-person-container,
+  #user-container {
+    width: 100%;
+    flex: 0 0 calc(50% - 5px); /* Adjusted for column layout */
+  }
+  
+  #controls {
+    padding: 15px 0;
+  }
+}
+
+#end-call-video {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.8);
+  border-radius: var(--border-radius);
+}
+
+.call-ending-message {
+  text-align: center;
+  color: #fff;
+  padding: 2rem;
+}
+
+.call-ending-message i {
+  font-size: 4rem;
+  color: var(--success-color);
+  margin-bottom: 1.5rem;
+  display: block;
+}
+
+.call-ending-message p {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.redirect-text {
+  font-size: 1.1rem !important;
+  opacity: 0.7;
+  margin-top: 1rem;
+}
+
+/* Style for disabled controls after call ends */
+.controls-container button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.call-ended {
+  background-color: #666;
+  color: #ddd;
+}
+
+button.call-ended:hover {
+  background-color: #666;
+  transform: none;
 }
