@@ -203,6 +203,7 @@ const Meet: React.FC = () => {
       try {
         // Bắt đầu cả ghi âm (cho download) và nhận diện giọng nói
         mediaRecorderRef.current?.start();
+        console.log(mediaRecorderRef.current?.state);
         recognitionRef.current.start();
       } catch(e) {
         console.error("Lỗi khi bắt đầu nhận diện, có thể đang chạy:", e);
