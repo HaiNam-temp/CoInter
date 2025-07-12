@@ -33,7 +33,8 @@ CoInter is a web-based platform designed for conducting remote interviews. It pr
 
 1.  **Clone the repository:**
     ```bash
-    git clone <repository-url>
+    git clone https://github.com/e4glevlr/CoInter
+git checkout fe
     cd CoInter
     ```
 
