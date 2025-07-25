@@ -2,6 +2,8 @@
 import os
 import json
 from pathlib import Path
+
+import requests
 from dotenv import load_dotenv
 from openai import OpenAI, APIError, RateLimitError # Thêm các loại lỗi cụ thể
 from flask import Flask, render_template, request, jsonify, send_file, abort
@@ -12,16 +14,16 @@ from pydub.utils import which
 AudioSegment.converter = which("ffmpeg")  # Đảm bảo `pydub` sử dụng đúng `ffmpeg`
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "http://localhost:5173"}}, supports_credentials=True)  # Cho phép tất cả các nguồn gốc (origins) truy cập vào API
+CORS(app, resources={r"/*": {"origins": {"https://localhost:5173", "https://192.168.1.15:5173", "https://192.168.1.15:5000"}}}, supports_credentials=True)  # Cho phép tất cả các nguồn gốc (origins) truy cập vào API
 # --- Load Biến Môi Trường ---
 load_dotenv()
-
+api_key = os.getenv("OPEN_AI_KEY")
 # --- Khởi Tạo Flask App ---
 # Sử dụng thư mục templates và static mặc định
 
 
 # --- Khởi Tạo OpenAI Client ---
-client = OpenAI(api_key="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")
+client = OpenAI(api_key=api_key)
 
 # --- Dữ Liệu CV và Job Details ---
 # !!! Trong ứng dụng thực tế, dữ liệu này nên được lấy từ DB hoặc nguồn khác
@@ -145,8 +147,12 @@ personality = f"""
   * Record and organize the candidate's answers clearly (by appending to our message history).
   * Provide constructive feedback after each round or key answer.
   * Ask probing questions to check the user's depth of knowledge and problem-solving abilities.
-  * Always require the user to answer in detail and clearly. Encourage elaboration.
-  * Start the conversation with a greeting and the first warm-up question.
+    * Always require the user to answer in detail and clearly. Encourage elaboration.
+    * Start the conversation with a greeting and the first warm-up question.
+
+**Language Requirement:**
+* All outputs, questions, analysis, and feedback **must be written in English** regardless of the user's language.
+
 
   **Additional Information:**
 
@@ -214,11 +220,12 @@ def generate_text():
     global messages # Sử dụng biến global (cần cẩn thận)
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini", # Hoặc "gpt-4" / "gpt-3.5-turbo" tùy nhu cầu/chi phí
+            model="gpt-4.1-nano",
             messages=messages
         )
         bot_response = response.choices[0].message.content
-        # Thêm phản hồi của bot vào messages NGAY LẬP TỨC
+
+
         messages.append({"role": "assistant", "content": bot_response})
         print("Bot response generated and added to history.")
         return bot_response
@@ -369,6 +376,45 @@ def process_audio():
             except OSError as e:
                 print(f"Error deleting converted file {converted_audio_path}: {e}")
 
+@app.route('/process_text', methods=['POST'])
+def process_text():
+    global messages
+
+    user_message = request.json['user_message']
+    user_session = request.json['sessionid']
+    print("user_message:", user_message)
+    print("user_session:", user_session)
+
+    messages.append({"role": "user", "content": user_message})
+    print("Transcript added to history as user message.")
+
+    # Sinh phản hồi từ bot
+    bot_response_text = generate_text()
+    print("bot_response_text:", bot_response_text)
+
+    # Gửi POST request đến server digital human
+    try:
+        response = requests.post(
+            "https://192.168.1.15:8010/human",
+            json={
+                "text": bot_response_text,
+                "type": "echo",
+                "interrupt": True,
+                "sessionid": user_session
+            },
+            verify=False  # ⚠️ Tắt SSL verification nếu là local self-signed cert
+        )
+        print("Sent to digital human:", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        print("Error sending to digital human:", e)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+    return jsonify({
+        "success": True,
+        "bot_response": bot_response_text
+    })
+
+
 # Add this after your other route definitions
 if __name__ == '__main__':
     # !!! Chế độ debug không phù hợp cho production
@@ -384,4 +430,4 @@ if __name__ == '__main__':
     #          messages.insert(0, {"role": "system", "content": personality})
 
     print("Starting Flask app in debug mode...")
-    app.run(debug=True, host='0.0.0.0', port=5000) # Chạy trên tất cả interface, port 5000
+    app.run(debug=True, host='0.0.0.0', port=5000, ssl_context=('ssl/cert.pem', 'ssl/key.pem')) # Chạy trên tất cả interface, port 5000

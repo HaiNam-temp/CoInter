@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Avatar Video Chat</title>
+    <style>
+        body { font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; }
+        #media { margin: 20px 0; border: 1px solid #ccc; background-color: #000; }
+        video { width: 640px; height: 480px; background-color: black; }
+        .controls { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; width: 640px; }
+        .controls button { padding: 10px 15px; cursor: pointer; }
+        .echo-form { display: flex; gap: 5px; }
+        #status { margin-top: 10px; color: green; }
+        #error { margin-top: 10px; color: red; }
+    </style>
+</head>
+<body>
+    <h1>AI Avatar Video Chat</h1>
+
+    <div class="option">
+        <input id="use-stun" type="checkbox"/>
+        <label for="use-stun">Use STUN server</label>
+    </div>
+
+    <div id="media">
+        <h2>Media</h2>
+        <audio id="audio" autoplay="true"></audio>
+        <video id="video" style="width:600px;" autoplay="true" playsinline="true"></video>
+    </div>
+
+
+    <input type="hidden" id="sessionid" value="0">
+
+
+    <div class="controls">
+        <button id="start" onclick="start()">Start Call</button>
+        <button id="stop" style="display: none" onclick="stop()">END</button>
+
+        <form class="form-inline" id="echo-form">
+            <div class="form-group">
+              <textarea cols="2" rows="3" style="width:600px;height:50px;" class="form-control" id="message">test</textarea>
+            </div>
+            <button type="submit" class="btn btn-default">Send</button>
+        </form>
+
+        <!-- Audio Recording Controls -->
+        <button id="toggleRecordButton" disabled>Start Recording Audio</button>
+        <p id="recordingStatus"></p>
+
+        <button id="interruptButton" disabled>Interrupt Talk</button>
+        <button id="checkSpeakingButton" disabled>Check Speaking Status</button>
+        <p id="speakingStatus"></p>
+    </div>
+
+    <p id="status"></p>
+    <p id="error"></p>
+    <script src="client.js"></script>
+    <script>
+
+    </script>
+</body>
+</html>
