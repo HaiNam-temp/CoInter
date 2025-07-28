@@ -16,7 +16,22 @@ declare global {
     start: () => void;
     stop: () => void;
     updateSessionId: (id: string) => void;
+    SpeechRecognition: any;
+    webkitSpeechRecognition: any;
   }
+}
+
+// Type declarations for Web Speech API
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start(): void;
+  stop(): void;
+  onstart: () => void;
+  onresult: (event: any) => void;
+  onerror: (event: any) => void;
+  onend: () => void;
 }
 
 const Meet: React.FC = () => {
@@ -29,9 +44,8 @@ const Meet: React.FC = () => {
   const [isUploadingCV, setIsUploadingCV] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-<<<<<<< Updated upstream
   const [sessionId, setSessionId] = useState("0");
-
+  const greetingPlayedRef = useRef<boolean>(false); // Track if greeting has been played
 
   // ================= STATE VÀ REF MỚI CHO SPEECH RECOGNITION =================
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -39,9 +53,6 @@ const Meet: React.FC = () => {
   // Dùng ref để lưu văn bản cuối cùng, tránh re-render không cần thiết
   const finalTranscriptRef = useRef('');
   // ========================================================================
-=======
-  const greetingPlayedRef = useRef<boolean>(false); // Track if greeting has been played
->>>>>>> Stashed changes
 
   useEffect(() => {
     const initializeMedia = async () => {
@@ -127,16 +138,6 @@ const Meet: React.FC = () => {
       }
     };
 
-<<<<<<< Updated upstream
-    initializeMedia();
-
-    // Cleanup function
-    return () => {
-        if (recognitionRef.current) {
-            recognitionRef.current.stop();
-        }
-    }
-=======
     // Function to play interview greeting audio
     const playInterviewGreeting = async () => {
       // Check if greeting has already been played
@@ -188,7 +189,6 @@ const Meet: React.FC = () => {
     };
 
     initializeAll();
->>>>>>> Stashed changes
   }, []);
 
   // Hàm yêu cầu Model Digital Human nói (Echo)
@@ -299,71 +299,107 @@ const Meet: React.FC = () => {
             if (mediaRecorderRef.current) mediaRecorderRef.current.onstop = null;
         }
     }
-<<<<<<< Updated upstream
-=======
     
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
       console.log('Dừng ghi âm...');
     
       // Define the handler outside the event context
-      const handleRecordingStopped = () => {
+      const handleRecordingStopped = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         const formData = new FormData();
         formData.append('audio', audioBlob, 'recording.webm');
     
-        // Use a timeout to break the event chain
-        setTimeout(() => {
-          // Use the older XMLHttpRequest instead of fetch
-          const xhr = new XMLHttpRequest();
-          xhr.open('POST', 'http://localhost:5000/process_audio_local', true);
-          xhr.responseType = 'blob';
+        try {
+          console.log('🎯 Starting 3-step audio processing...');
           
-          // Listen for transcript and response info in response headers
-          xhr.onreadystatechange = function() {
-            if (xhr.readyState === XMLHttpRequest.HEADERS_RECEIVED) {
-              const transcript = xhr.getResponseHeader('X-Transcript');
-              const responseText = xhr.getResponseHeader('X-Response-Text');
-              const companyName = xhr.getResponseHeader('X-Company-Name');
-              const jobPosition = xhr.getResponseHeader('X-Job-Position');
-              
-              if (transcript) {
-                console.log('🎙️ Speech-to-Text Result:', transcript);
-                console.log('🤖 AI Interview Response:', responseText);
-                console.log('🏢 Company:', companyName);
-                console.log('💼 Position:', jobPosition);
-                // You can add code to display transcript on UI if needed
-                // Example: updateTranscriptDisplay(transcript);
-              }
-            }
+          // Step 1: Convert audio to text
+          console.log('📝 Step 1: Converting audio to text...');
+          const audioToTextResponse = await fetch('http://localhost:5000/audio_to_text', {
+            method: 'POST',
+            body: formData,
+          });
+          
+          if (!audioToTextResponse.ok) {
+            throw new Error(`Audio to text failed: ${audioToTextResponse.statusText}`);
+          }
+          
+          const audioToTextData = await audioToTextResponse.json();
+          const userTranscript = audioToTextData.transcript;
+          
+          console.log('🎙️ User transcript:', userTranscript);
+          
+          // Step 2: Get AI response text
+          console.log('🤖 Step 2: Getting AI response text...');
+          const responseTextResponse = await fetch('http://localhost:5000/response_text', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              transcript: userTranscript
+            }),
+          });
+          
+          if (!responseTextResponse.ok) {
+            throw new Error(`Response text generation failed: ${responseTextResponse.statusText}`);
+          }
+          
+          const responseTextData = await responseTextResponse.json();
+          const aiResponseText = responseTextData.response_text;
+          
+          console.log('💬 AI response text:', aiResponseText);
+          
+          // Step 3: Convert AI response text to audio and play it
+          console.log('� Step 3: Converting AI response to audio...');
+          const generateAudioResponse = await fetch('http://localhost:5000/generate_audio', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              text: aiResponseText,
+              filename: 'interview_response.mp3'
+            }),
+          });
+          
+          if (!generateAudioResponse.ok) {
+            throw new Error(`Audio generation failed: ${generateAudioResponse.statusText}`);
+          }
+          
+          // Get the audio blob and play it
+          const audioBlob = await generateAudioResponse.blob();
+          const audioUrl = URL.createObjectURL(audioBlob);
+          const audio = new Audio(audioUrl);
+          
+          console.log('🎵 Playing AI response audio...');
+          
+          // Play the audio
+          audio.play().then(() => {
+            console.log('✅ Audio playback started successfully');
+          }).catch((error) => {
+            console.error('❌ Error playing audio:', error);
+          });
+          
+          // Clean up audio URL when done
+          audio.onended = function() {
+            URL.revokeObjectURL(audioUrl);
+            console.log('🎵 Audio playback completed');
           };
           
-          xhr.onload = function() {
-            if (xhr.status === 200) {
-              const blob = xhr.response;
-              const audioUrl = URL.createObjectURL(blob);
-              const audio = new Audio(audioUrl);
-              
-              // Play the audio
-              audio.play();
-              
-              // Clean up audio URL when done
-              audio.onended = function() {
-                URL.revokeObjectURL(audioUrl);
-              };
-            } else {
-              console.error('Error processing audio:', xhr.status);
-              // Handle error - maybe show a notification to user
-            }
-          };
+          // Log summary
+          console.log('✅ 3-step audio processing completed successfully!');
+          console.log('📊 Processing Summary:');
+          console.log(`   👤 User said: "${userTranscript}"`);
+          console.log(`   🤖 AI responded: "${aiResponseText.substring(0, 100)}${aiResponseText.length > 100 ? '...' : ''}"`);
           
-          xhr.onerror = function() {
-            console.error('Network error occurred while processing audio');
-            // Handle network error
-          };
+        } catch (error) {
+          console.error('❌ Error in 3-step audio processing:', error);
           
-          xhr.send(formData);
-        }, 0);
+          // Show user-friendly error message
+          // You can add UI notification here
+          alert('Đã có lỗi xảy ra trong quá trình xử lý. Vui lòng thử lại.');
+        }
       };
     
       // Set up the onstop handler and clear it after use
@@ -376,7 +412,6 @@ const Meet: React.FC = () => {
     }
     
     return false;
->>>>>>> Stashed changes
   };
 
   const handleEndCall = () => {
@@ -511,20 +546,6 @@ const Meet: React.FC = () => {
           <button type="button" id="camera-toggle" onClick={() => handleCameraToggle(isCameraOn, setIsCameraOn)}>
             <i className={`fas ${isCameraOn ? 'fa-video' : 'fa-video-slash'}`}></i>
           </button>
-<<<<<<< Updated upstream
-          <button
-            type="button"
-            id="download-audio-button"
-            onClick={handleDownloadLastRecording}
-            title="Tải xuống bản ghi âm cuối"
-          >
-            <i className="fas fa-download"></i>
-          </button>
-          <input type="file" id="cv-upload-input" hidden onChange={(e) => handleFileUpload(e.target.files?.[0])}/>
-          <button type="button" id="upload-cv-button"
-                  onClick={() => document.getElementById('cv-upload-input')?.click()}>
-            <i className="fas fa-file-arrow-up"></i>
-=======
           <input 
             type="file" 
             id="cv-upload-input" 
@@ -540,7 +561,6 @@ const Meet: React.FC = () => {
             title="Upload CV (PDF only)"
           >
             <i className={`fas ${isUploadingCV ? 'fa-spinner fa-spin' : 'fa-file-arrow-up'}`}></i>
->>>>>>> Stashed changes
           </button>
           <button type="button" id="call-toggle" onClick={handleEndCall}>
             <i className="fas fa-phone-slash"></i>

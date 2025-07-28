@@ -175,24 +175,59 @@ const Meets: React.FC = () => {
         console.log('✅ Company information updated successfully:', data.company_info);
         console.log('✅ Chatbot personality updated for interview with:', companyName);
         
-        // Gọi API để cập nhật personality chatbot
+        // Bước 1: Gọi API để tạo text chào ban đầu
         try {
-          const personalityResponse = await fetch('http://localhost:5000/update_personality_with_company_info', {
+          console.log('🤖 Generating initial greeting text...');
+          const generateTextResponse = await fetch('http://localhost:5000/generate_init_text', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
           });
           
-          const personalityData = await personalityResponse.json();
+          const textData = await generateTextResponse.json();
           
-          if (personalityResponse.ok && personalityData.success) {
-            console.log('✅ Chatbot personality updated successfully via API');
+          if (generateTextResponse.ok && textData.success) {
+            console.log('✅ Initial greeting text generated successfully');
+            console.log('📝 Greeting text:', textData.greeting_text);
+            
+            // Bước 2: Gọi API để chuyển text thành audio
+            try {
+              console.log('🔊 Converting greeting text to audio...');
+              const generateAudioResponse = await fetch('http://localhost:5000/generate_audio', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  text: textData.greeting_text,
+                  filename: 'interview_greeting.mp3'
+                }),
+              });
+              
+              if (generateAudioResponse.ok) {
+                console.log('✅ Audio generated successfully');
+                
+                // Optionally, you can download and store the audio blob for future use
+                const audioBlob = await generateAudioResponse.blob();
+                console.log('🎵 Audio blob size:', audioBlob.size, 'bytes');
+                
+                // The audio is now ready on the server and can be accessed later in the Meet component
+                // via the /get_interview_greeting/interview_greeting.mp3 endpoint
+                
+              } else {
+                console.warn('⚠️ Warning: Audio generation failed, but continuing...');
+              }
+            } catch (audioError) {
+              console.error('❌ Error generating audio:', audioError);
+              // Không throw error để không block flow chính
+            }
+            
           } else {
-            console.warn('⚠️ Warning: Personality update failed, but continuing...');
+            console.warn('⚠️ Warning: Text generation failed, but continuing...');
           }
-        } catch (personalityError) {
-          console.error('❌ Error calling personality update API:', personalityError);
+        } catch (textError) {
+          console.error('❌ Error generating initial text:', textError);
           // Không throw error để không block flow chính
         }
         
