@@ -2,28 +2,86 @@
 import os
 import json
 from pathlib import Path
+
+import requests
 from dotenv import load_dotenv
 from openai import OpenAI, APIError, RateLimitError # Thêm các loại lỗi cụ thể
-from flask import Flask, render_template, request, jsonify, send_file, abort
+from flask import Flask, render_template, request, jsonify, send_file, abort, Response
 from flask_cors import CORS
 from pydub import AudioSegment  # Thêm thư viện này để chuyển đổi định dạng âm thanh
 from pydub.utils import which
+import fitz  # PyMuPDF for PDF text extraction
+import json
+import os
+import whisper  # Thêm thư viện whisper local
+import time  # Thêm để sử dụng trong streaming
+import torch  # Thêm để kiểm tra GPU
+from TTS.api import TTS  # Thêm Coqui TTS
 
 AudioSegment.converter = which("ffmpeg")  # Đảm bảo `pydub` sử dụng đúng `ffmpeg`
 
+# --- Khởi tạo Whisper Model ---
+# Load model một lần khi khởi động ứng dụng để tránh delay
+try:
+    whisper_model = whisper.load_model("base")  # Có thể dùng "small", "medium", "large" cho độ chính xác cao hơn
+    print("Whisper model loaded successfully")
+except Exception as e:
+    print(f"Error loading Whisper model: {e}")
+    whisper_model = None
+
+# --- Khởi tạo Coqui TTS Model ---
+# Load TTS model một lần khi khởi động ứng dụng
+try:
+    # Get device
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Using device for TTS: {device}")
+    
+    # Initialize TTS với model nhanh hơn cho tiếng Anh
+    # Sử dụng model FastSpeech2 cho độ trễ thấp hơn
+    try:
+        tts_model = TTS("tts_models/en/ljspeech/fast_pitch").to(device)
+        print("Coqui TTS FastPitch model loaded successfully")
+    except:
+        # Fallback về model tacotron2 nếu FastPitch không có
+        tts_model = TTS("tts_models/en/ljspeech/tacotron2-DDC").to(device)
+        print("Coqui TTS Tacotron2 model loaded successfully")
+except Exception as e:
+    print(f"Error loading Coqui TTS model: {e}")
+    tts_model = None
+
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "http://localhost:5173"}}, supports_credentials=True)  # Cho phép tất cả các nguồn gốc (origins) truy cập vào API
+<<<<<<< Updated upstream
+CORS(app, resources={r"/*": {"origins": {"https://localhost:5173", "https://192.168.1.15:5173", "https://192.168.1.15:5000"}}}, supports_credentials=True)  # Cho phép tất cả các nguồn gốc (origins) truy cập vào API
+=======
+
+# Simple CORS configuration
+CORS(app, origins=["http://localhost:5173"], supports_credentials=True, 
+     expose_headers=['X-Transcript', 'X-AI-Response', 'X-Model-Used', 'X-Response-Text', 'X-Company-Name', 'X-Job-Position'])
+
+>>>>>>> Stashed changes
 # --- Load Biến Môi Trường ---
 load_dotenv()
-
+api_key = os.getenv("OPEN_AI_KEY")
 # --- Khởi Tạo Flask App ---
 # Sử dụng thư mục templates và static mặc định
 
 
 # --- Khởi Tạo OpenAI Client ---
-client = OpenAI(api_key="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")
+<<<<<<< Updated upstream
+client = OpenAI(api_key=api_key)
+=======
+client = OpenAI(api_key="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")
+>>>>>>> Stashed changes
 
 # --- Dữ Liệu CV và Job Details ---
+company_information = {
+    "company_name": "",
+    "job_position": "",
+    "company_field": "",
+    "company_products": "",
+    "company_culture": "",
+    "other_info": ""
+}
 # !!! Trong ứng dụng thực tế, dữ liệu này nên được lấy từ DB hoặc nguồn khác
 cv = """[
   {
@@ -106,60 +164,105 @@ job_details = """{
 }"""
 
 # --- Định Nghĩa "Tính Cách" Chatbot ---
-personality = f"""
-  You are a chatbot acting as a professional interviewer for a company (the name isn't explicitly mentioned, let's assume Step Up based on job_details).
+def get_personality():
+    return f"""
+  You are a chatbot acting as a professional interviewer for a company.
   **Context:**
+You are interviewing a candidate for the position of "{company_information.get('job_position', 'a role')}" at {company_information.get('company_name', 'this company')}.
 
-  * You are provided with the candidate's CV and the job description of the position being recruited.
-  * Your task is to analyze the CV and job description to ask relevant interview questions, assessing the candidate's skills and experience against the job requirements.
+**Company Details (provided by candidate):**
+- Company Name: {company_information.get('company_name', 'Not specified')}
+- Job Position: {company_information.get('job_position', 'Not specified')}
+- Company Field: {company_information.get('company_field', 'Not specified')}
+- Company Products/Services: {company_information.get('company_products', 'Not specified')}
+- Company Culture: {company_information.get('company_culture', 'Not specified')}
+- Additional Information: {company_information.get('other_info', 'Not specified')}
 
-  **Interview Process:**
+**Important Personality Rule**: After receiving each user response, you must:
+1. Implicitly score the answer internally (never reveal numerical scores during rounds 1-3)
+2. Generate smooth connecting commentary and evaluation
+3. Provide constructive feedback that relates to the role requirements
+4. Ask the next question in sequence according to the defined round structure
+5. Maintain natural conversation flow while strictly following the question count per round
 
-  1.  **Round 1: Personal Introduction (warm-up)**
-      * Ask an open-ended question for the candidate to introduce themselves (not directly related to professional skills).
-          * Example: "Could you share a bit about your hobbies or extracurricular activities?"
-      * Ask 1-2 follow-up questions to understand the candidate's personality and motivation better.
-      * Record the answers and provide brief, encouraging feedback.
-      * Analyze the answer, make comments, and give advice to the user to improve their answer (if needed).
-  2.  **Round 2: Basic Professional Knowledge**
-      * Based on the job description, ask 2 questions about basic professional knowledge related to the position (e.g., AI/ML concepts, LLMs, MLOps).
-      * Ask 1-2 follow-up questions for each main question to test the candidate's depth of understanding.
-      * Record the answers.
-      * Analyze the answer, explain again if the user answer is wrong, and give advice to the user to improve their answer.
-  3.  **Round 3: Project Experience**
-      * Ask the candidate to describe in detail the projects they have participated in (based on the CV).
-      * Ask deeper questions to understand:
-          * What were the candidate's roles in the projects?
-          * Which teams did the candidate work with?
-          * Detailed analysis of the technical expertise used in the projects (e.g., specific models like Faster R-CNN, DeepQLearning, fine-tuning LLMs if mentioned).
-      * Ask related questions to understand the candidate's approach and problem-solving skills in the projects.
-      * Record the answers, analyze, and provide feedback/advice.
-  4.  **Conclusion:**
-      * After each candidate's answer, ask the next question to continue the interview process smoothly.
-      * Finish the interview, thank the user, and inform the next steps (e.g., "Thank you for your time. We will review your application and get back to you soon.").
+**Interview Structure:**
+**Interview Process (STRICTLY follow this structure):**
 
-  **Requirements:**
+1.  **Round 1: Personal Introduction (EXACTLY 2 questions)**
+    * Begin with a warm, personalized introduction focusing on the {company_information.get('job_position', 'position')} role at the {company_information.get('company_name', 'company')}.
+    * Ask EXACTLY 2 questions covering these key areas:
+        - Personal introduction and background (encourage them to share about themselves)
+        - Understanding of their strengths and areas for growth
+    **After each answer**: 
+        - Provide encouraging, specific feedback that connects their responses to the role
+        - Implicitly score the answer internally (do not reveal scores to candidate)
+        - Generate smooth transition commentary and evaluation
+    **Analysis Process**: Evaluate how their introduction and self-assessment relate to the {company_information.get('job_position', 'job position')} requirements.
+    **Transition Rule**: After EXACTLY 2 questions and responses, naturally transition to Round 2 with connecting commentary.
 
+<<<<<<< Updated upstream
   * Maintain a professional, friendly, and objective attitude throughout the interview.
   * Analyze information from the CV and job description to ask relevant and specific questions.
   * Record and organize the candidate's answers clearly (by appending to our message history).
   * Provide constructive feedback after each round or key answer.
   * Ask probing questions to check the user's depth of knowledge and problem-solving abilities.
-  * Always require the user to answer in detail and clearly. Encourage elaboration.
-  * Start the conversation with a greeting and the first warm-up question.
+    * Always require the user to answer in detail and clearly. Encourage elaboration.
+    * Start the conversation with a greeting and the first warm-up question.
+
+**Language Requirement:**
+* All outputs, questions, analysis, and feedback **must be written in English** regardless of the user's language.
+
+=======
+
+2.  **Round 2: Professional Knowledge & Company Fit (3 questions)**
+    * Ask exactly 3 questions about professional knowledge specifically related to:
+        - {company_information.get('company_field', 'the industry')} industry
+        - Skills needed for {company_information.get('job_position', 'this position')}
+        - Experience with {company_information.get('company_products', 'relevant products/services')}
+    * Test depth of understanding and evaluate how their skills match {company_information.get('company_name', 'the company')}'s needs.
+    * Provide feedback and advice for improvement after each answer.
+    * After 3 questions, move to Round 3.
+
+3.  **Round 3: Project Experience & Technical Deep Dive (4 questions)**
+    * Ask exactly 4 questions about projects and technical experience relevant to {company_information.get('company_field', 'this field')}.
+    * Focus on how their experience applies to {company_information.get('job_position', 'this position')}.
+    * Ask specific questions about:
+        - Technical expertise relevant to {company_information.get('company_products', 'the company\'s products')}
+        - Problem-solving approaches that would work at {company_information.get('company_name', 'this company')}
+        - Team collaboration and project management experience
+        - Challenges faced and solutions implemented in previous projects
+    * Provide detailed feedback and suggestions after each answer.
+    * After 4 questions, move to Round 4.
+
+4.  **Round 4: Summary & Scoring**
+    * Provide an implicit summary by naturally discussing the candidate's overall performance and fit for {company_information.get('job_position', 'the position')} at {company_information.get('company_name', 'the company')}.
+    * Give only a single overall score: **SCORE: X/10**
+    * Briefly mention key strengths and areas for improvement.
+    * Thank them for applying and inform about next steps.
+
+**Requirements:**
+* STRICTLY follow the question count for each round (2-3-4 questions).
+* Always reference {company_information.get('company_name', 'the company')} and {company_information.get('job_position', 'the position')} in your questions.
+* Tailor ALL technical questions to {company_information.get('company_field', 'the industry')}.
+* Evaluate cultural fit based on: {company_information.get('company_culture', 'the stated company culture')}.
+* Keep track of question count and announce when moving to next round.
+* Maintain a professional, friendly tone throughout.
+* Provide constructive feedback after each answer.
+* At the end, give a single overall score out of 10.
+>>>>>>> Stashed changes
 
   **Additional Information:**
 
   * Candidate CV: {cv}
-  * Job description: {job_details}
 
-  Please begin the interview! Good luck! :)
+  Note: Additional company-specific information may be provided during the interview process to create more personalized questions.
+
+  Please begin the interview with a greeting and start Round 1 with the first personal introduction question!
 """
 
 # --- Lịch Sử Hội Thoại ---
 # !!! Cảnh báo: Biến global, không phù hợp cho nhiều người dùng đồng thời.
-messages = [{"role": "system", "content": personality}]
-
+messages = [{"role": "system", "content": get_personality()}]
 # --- Hàm Lưu/Tải Lịch Sử Chat (Tùy chọn sử dụng) ---
 HISTORY_FILE = "history.json"
 
@@ -188,37 +291,82 @@ def load_history_from_json(file_path=HISTORY_FILE):
 
 # --- Hàm Helper ---
 
-def generate_audio(text, filename="speech_output.mp3"):
-    """Chuyển văn bản thành audio, xử lý lỗi cơ bản."""
-    # !!! Lưu ý: Giới hạn độ dài văn bản của API TTS vẫn áp dụng.
-    # Cách xử lý chunking phức tạp hơn (ghép file) không được triển khai ở đây.
-    speech_file_path = Path(__file__).parent / filename
+def process_speech_to_text(audio_file_path):
+    """Chuyển đổi file audio thành text sử dụng Whisper local hoặc OpenAI API."""
     try:
-        response = client.audio.speech.create(
-            model="tts-1",
-            voice="nova", # Bạn có thể thử các giọng khác: alloy, echo, fable, onyx, shimmer
-            input=text
-        )
-        response.stream_to_file(speech_file_path)
-        print(f"Audio successfully generated: {speech_file_path}")
+        if whisper_model is None:
+            print("Whisper model not loaded, falling back to OpenAI API")
+            # Fallback về OpenAI API nếu model local không load được
+            with open(audio_file_path, "rb") as audio_data:
+                transcript_response = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_data
+                )
+            transcript = transcript_response.text
+        else:
+            # Sử dụng Whisper local
+            print("Using local Whisper model for transcription")
+            result = whisper_model.transcribe(str(audio_file_path))
+            transcript = result["text"]
+        
+        print(f"Transcription successful: {transcript}")
+        return transcript
+    except Exception as e:
+        print(f"Error during transcription: {e}")
+        raise Exception("Failed to transcribe audio")
+
+def generate_audio(text, filename="speech_output.mp3"):
+    """Chuyển text thành audio (Text-to-Speech) sử dụng local TTS model hoặc OpenAI API."""
+    speech_file_path = Path(__file__).parent / filename
+    
+    try:
+        if tts_model is None:
+            print("Coqui TTS model not loaded, falling back to OpenAI API")
+            # Fallback về OpenAI API nếu model local không load được
+            response = client.audio.speech.create(
+                model="tts-1",
+                voice="nova", # Bạn có thể thử các giọng khác: alloy, echo, fable, onyx, shimmer
+                input=text
+            )
+            response.stream_to_file(speech_file_path)
+            print(f"Audio generated using OpenAI TTS: {speech_file_path}")
+        else:
+            # Sử dụng Coqui TTS local
+            print("Using local Coqui TTS model for audio generation")
+            
+            # Đảm bảo file extension phù hợp với Coqui TTS (thường là .wav)
+            if not str(speech_file_path).endswith('.wav') and not str(speech_file_path).endswith('.mp3'):
+                speech_file_path = speech_file_path.with_suffix('.wav')
+            
+            # Tạo audio với Coqui TTS
+            tts_model.tts_to_file(text=text, file_path=str(speech_file_path))
+            print(f"Audio generated using Coqui TTS: {speech_file_path}")
+        
         return speech_file_path
     except APIError as e:
         print(f"OpenAI API Error during TTS generation: {e}")
         return None
     except Exception as e:
-        print(f"An unexpected error occurred during TTS generation: {e}")
+        print(f"Error during TTS generation: {e}")
         return None
 
 def generate_text():
     """Tạo phản hồi text từ OpenAI, cập nhật lịch sử messages."""
-    global messages # Sử dụng biến global (cần cẩn thận)
+    global messages, company_information # Sử dụng biến global (cần cẩn thận)
     try:
+        # Log company information status for debugging
+        if company_information.get('company_name'):
+            print(f"Generating response with company context: {company_information['company_name']} - {company_information['job_position']}")
+        else:
+            print("Generating response with default context (no company info)")
+            
         response = client.chat.completions.create(
-            model="gpt-4o-mini", # Hoặc "gpt-4" / "gpt-3.5-turbo" tùy nhu cầu/chi phí
+            model="gpt-4.1-nano",
             messages=messages
         )
         bot_response = response.choices[0].message.content
-        # Thêm phản hồi của bot vào messages NGAY LẬP TỨC
+
+
         messages.append({"role": "assistant", "content": bot_response})
         print("Bot response generated and added to history.")
         return bot_response
@@ -237,18 +385,28 @@ def generate_text():
 
 @app.route('/')
 def index():
-    """Trang chủ."""
-    return render_template('index.html')
+    """API status endpoint."""
+    return jsonify({
+        'status': 'CoInter Interview API is running',
+        'version': '1.0',
+        'endpoints': [
+            '/process_audio_local',
+            '/update_company_info',
+            '/update_personality_with_company_info',
+            '/reset_session',
+            '/get_company_info'
+        ]
+    })
 
 @app.route('/chat/text')
 def text_chat():
-    """Route cho giao diện chat text (trỏ về index.html)."""
-    return render_template('index.html')
+    """API status for text chat."""
+    return jsonify({'status': 'Text chat API endpoint available'})
 
 @app.route('/chat/speech')
 def speech_chat():
-    """Route cho giao diện chat speech (trỏ về index.html)."""
-    return render_template('index.html')
+    """API status for speech chat."""
+    return jsonify({'status': 'Speech chat API endpoint available'})
 
 @app.route('/get_last_messages')
 def get_last_messages():
@@ -286,16 +444,14 @@ def send_message():
         return jsonify({'reply': "An internal server error occurred."}), 500
 
 
-@app.route('/process_audio', methods=['POST'])
-def process_audio():
-    """Nhận file audio, chuyển thành text, gửi đến OpenAI, tạo audio phản hồi."""
-    global messages
-    audio_file = None
+@app.route('/transcribe_audio', methods=['POST'])
+def transcribe_audio():
+    """Chỉ thực hiện speech-to-text và trả về transcript ngay lập tức."""
     temp_audio_path = None
-    converted_audio_path = None  # Đường dẫn file sau khi chuyển đổi
-    response_audio_path = None
+    converted_audio_path = None
 
     try:
+        # Bước 1: Validate và xử lý file audio
         if 'audio' not in request.files:
             return jsonify({"error": "No audio file part in the request"}), 400
 
@@ -320,42 +476,109 @@ def process_audio():
             if temp_audio_path.exists():
                 temp_audio_path.unlink()
 
-        # Chuyển đổi audio sang text (Speech-to-Text)
+        # Bước 2: Chỉ thực hiện Speech-to-Text
         try:
-            with open(converted_audio_path, "rb") as audio_data:
-                transcript_response = client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=audio_data
-                )
-            transcript = transcript_response.text
-            print(f"Transcription successful: {transcript}")
-        except APIError as e:
-            print(f"OpenAI API Error during transcription: {e}")
-            return jsonify({"error": "Failed to transcribe audio."}), 500
+            transcript = process_speech_to_text(converted_audio_path)
+            print(f"Transcription completed: {transcript}")
+            
+            # Trả về transcript ngay lập tức để frontend log
+            return jsonify({
+                'transcript': transcript,
+                'status': 'success',
+                'message': 'Speech-to-text completed successfully'
+            })
         except Exception as e:
-            print(f"An unexpected error occurred during transcription: {e}")
-            return jsonify({"error": "Audio processing failed."}), 500
+            return jsonify({"error": "Failed to transcribe audio.", "details": str(e)}), 500
 
-        # Thêm transcript (user message) vào history
-        messages.append({"role": "user", "content": transcript})
-        print("Transcript added to history as user message.")
+    except Exception as e:
+        print(f"Error in /transcribe_audio endpoint: {e}")
+        return jsonify({'error': "An internal server error occurred."}), 500
+    finally:
+        # Dọn dẹp file âm thanh tạm thời
+        if converted_audio_path and converted_audio_path.exists():
+            try:
+                converted_audio_path.unlink()
+                print(f"Deleted converted audio file: {converted_audio_path}")
+            except OSError as e:
+                print(f"Error deleting converted file {converted_audio_path}: {e}")
 
-        # Gọi OpenAI để lấy phản hồi text (hàm này đã tự thêm bot reply vào messages)
-        bot_response_text = generate_text()
+@app.route('/process_audio', methods=['POST'])
+def process_audio():
+    """Nhận file audio, chuyển thành text, gửi đến OpenAI, tạo audio phản hồi - LEGACY VERSION."""
+    global messages
+    temp_audio_path = None
+    converted_audio_path = None
+    response_audio_path = None
 
-        # Tạo audio từ phản hồi text (Text-to-Speech)
-        response_audio_path = generate_audio(bot_response_text)
-        if not response_audio_path:
-            # Nếu tạo audio lỗi, vẫn trả về text
+    try:
+        # Bước 1: Validate và xử lý file audio
+        if 'audio' not in request.files:
+            return jsonify({"error": "No audio file part in the request"}), 400
+
+        audio_file = request.files['audio']
+        if audio_file.filename == '':
+            return jsonify({"error": "No selected audio file"}), 400
+
+        # Lưu file âm thanh tạm thời
+        temp_audio_path = Path(__file__).parent / f"temp_voice_{os.urandom(8).hex()}.webm"
+        audio_file.save(temp_audio_path)
+
+        # Chuyển đổi file âm thanh sang định dạng mp3
+        converted_audio_path = temp_audio_path.with_suffix('.mp3')
+        try:
+            audio = AudioSegment.from_file(temp_audio_path)
+            audio.export(converted_audio_path, format="mp3")
+        except Exception as e:
+            print(f"Error converting audio: {e}")
+            return jsonify({"error": "Failed to convert audio file."}), 500
+        finally:
+            # Xóa file âm thanh tạm thời ban đầu
+            if temp_audio_path.exists():
+                temp_audio_path.unlink()
+
+        # Bước 2: Chuyển đổi audio sang text (Speech-to-Text)
+        try:
+            transcript = process_speech_to_text(converted_audio_path)
+            print(f"Speech-to-text completed: {transcript}")
+        except Exception as e:
+            return jsonify({"error": "Failed to transcribe audio."}), 500
+
+        # Bước 3: Tạo response text từ user input
+        try:
+            # Thêm tin nhắn user vào history
+            messages.append({"role": "user", "content": transcript})
+            print("User message added to history.")
+            
+            # Gọi OpenAI để lấy phản hồi
+            bot_response_text = generate_text()
+        except Exception as e:
+            return jsonify({"error": "Failed to generate text response."}), 500
+
+        # Bước 4: Chuyển đổi text response thành audio
+        try:
+            # Tạo filename unique để tránh conflict
+            filename = f"response_{os.urandom(4).hex()}.mp3"
+            response_audio_path = generate_audio(bot_response_text, filename)
+            
+            if not response_audio_path:
+                raise Exception("Failed to generate audio")
+        except Exception as e:
+            # Nếu tạo audio lỗi, vẫn trả về text với transcript để frontend log
             print("Failed to generate response audio, returning text reply.")
             save_history_to_json(messages)  # Lưu history trước khi trả về
-            return jsonify({'reply_text': bot_response_text, 'error': 'Could not generate audio response.'}), 500
+            return jsonify({
+                'reply_text': bot_response_text, 
+                'transcript': transcript,  # Thêm transcript để frontend log
+                'error': 'Could not generate audio response.'
+            }), 500
 
-        # Lưu lịch sử (tùy chọn)
+        # Lưu lịch sử
         save_history_to_json(messages)
 
-        # Gửi file audio phản hồi về client
-        return send_file(response_audio_path, as_attachment=True, download_name='response.mp3', mimetype='audio/mpeg')
+        # Gửi file audio phản hồi về client với header chứa transcript
+        response = send_file(response_audio_path, as_attachment=True, download_name='response.mp3', mimetype='audio/mpeg')
+        response.headers['X-Transcript'] = transcript  # Thêm transcript vào header để frontend có thể đọc
+        return response
 
     except Exception as e:
         print(f"Error in /process_audio endpoint: {e}")
@@ -369,6 +592,773 @@ def process_audio():
             except OSError as e:
                 print(f"Error deleting converted file {converted_audio_path}: {e}")
 
+<<<<<<< Updated upstream
+@app.route('/process_text', methods=['POST'])
+def process_text():
+    global messages
+
+    user_message = request.json['user_message']
+    user_session = request.json['sessionid']
+    print("user_message:", user_message)
+    print("user_session:", user_session)
+
+    messages.append({"role": "user", "content": user_message})
+    print("Transcript added to history as user message.")
+
+    # Sinh phản hồi từ bot
+    bot_response_text = generate_text()
+    print("bot_response_text:", bot_response_text)
+
+    # Gửi POST request đến server digital human
+    try:
+        response = requests.post(
+            "https://192.168.1.15:8010/human",
+            json={
+                "text": bot_response_text,
+                "type": "echo",
+                "interrupt": True,
+                "sessionid": user_session
+            },
+            verify=False  # ⚠️ Tắt SSL verification nếu là local self-signed cert
+        )
+        print("Sent to digital human:", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        print("Error sending to digital human:", e)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+    return jsonify({
+        "success": True,
+        "bot_response": bot_response_text
+    })
+
+
+=======
+@app.route('/streaming-demo')
+def streaming_demo():
+    """Demo page for streaming audio processing."""
+    return jsonify({'status': 'Streaming demo endpoint available'})
+
+@app.route('/tts-stt-test')
+def tts_stt_test():
+    """Demo page for testing local TTS/STT models."""
+    return jsonify({'status': 'TTS/STT test endpoint available'})
+
+@app.route('/download_audio/<filename>')
+def download_audio(filename):
+    """Download audio file được tạo."""
+    try:
+        file_path = Path(__file__).parent / filename
+        if file_path.exists():
+            return send_file(file_path, as_attachment=True, download_name='response.mp3', mimetype='audio/mpeg')
+        else:
+            return jsonify({"error": "Audio file not found"}), 404
+    except Exception as e:
+        print(f"Error downloading audio file: {e}")
+        return jsonify({"error": "Failed to download audio file"}), 500
+
+@app.route('/get_interview_greeting/<filename>')
+def get_interview_greeting(filename):
+    """Get interview greeting audio file."""
+    try:
+        file_path = Path(__file__).parent / filename
+        if file_path.exists():
+            return send_file(file_path, as_attachment=False, download_name=filename, mimetype='audio/mpeg')
+        else:
+            return jsonify({"error": "Greeting audio file not found"}), 404
+    except Exception as e:
+        print(f"Error serving greeting audio file: {e}")
+        return jsonify({"error": "Failed to serve greeting audio file"}), 500
+
+@app.route('/get_response_audio')
+def get_response_audio():
+    """Get the latest response audio file for auto-playing."""
+    try:
+        file_path = Path(__file__).parent / "response_audio.wav"
+        if file_path.exists():
+            return send_file(file_path, as_attachment=False, download_name='response_audio.wav', mimetype='audio/wav')
+        else:
+            return jsonify({"error": "Response audio file not found"}), 404
+    except Exception as e:
+        print(f"Error serving response audio file: {e}")
+        return jsonify({"error": "Failed to serve response audio file"}), 500
+
+@app.route('/test_local_tts_stt', methods=['POST'])
+def test_local_tts_stt():
+    """API test cho TTS và STT local - không sử dụng OpenAI API."""
+    temp_audio_path = None
+    converted_audio_path = None
+    response_audio_path = None
+
+    try:
+        # Bước 1: Validate và xử lý file audio
+        if 'audio' not in request.files:
+            return jsonify({"error": "No audio file part in the request"}), 400
+
+        audio_file = request.files['audio']
+        if audio_file.filename == '':
+            return jsonify({"error": "No selected audio file"}), 400
+
+        # Lưu file âm thanh tạm thời
+        temp_audio_path = Path(__file__).parent / f"temp_voice_{os.urandom(8).hex()}.webm"
+        audio_file.save(temp_audio_path)
+
+        # Chuyển đổi file âm thanh sang định dạng mp3
+        converted_audio_path = temp_audio_path.with_suffix('.mp3')
+        try:
+            audio = AudioSegment.from_file(temp_audio_path)
+            audio.export(converted_audio_path, format="mp3")
+        except Exception as e:
+            print(f"Error converting audio: {e}")
+            return jsonify({"error": "Failed to convert audio file."}), 500
+        finally:
+            # Xóa file âm thanh tạm thời ban đầu
+            if temp_audio_path.exists():
+                temp_audio_path.unlink()
+
+        # Bước 2: Chuyển đổi audio sang text (Speech-to-Text) - CHỈ DÙNG LOCAL
+        try:
+            if whisper_model is None:
+                return jsonify({"error": "Local Whisper model not available. Cannot proceed without OpenAI API."}), 500
+            
+            # Sử dụng Whisper local
+            print("Using local Whisper model for transcription")
+            result = whisper_model.transcribe(str(converted_audio_path))
+            transcript = result["text"]
+            print(f"Local STT completed: {transcript}")
+        except Exception as e:
+            return jsonify({"error": "Failed to transcribe audio with local model.", "details": str(e)}), 500
+
+        # Bước 3: Chuyển đổi transcript thành audio (Text-to-Speech) - CHỈ DÙNG LOCAL
+        try:
+            if tts_model is None:
+                return jsonify({"error": "Local TTS model not available. Cannot proceed without OpenAI API."}), 500
+            
+            # Tạo filename unique để tránh conflict
+            filename = f"test_tts_response_{os.urandom(4).hex()}.wav"
+            response_audio_path = Path(__file__).parent / filename
+            
+            # Sử dụng Coqui TTS local
+            print("Using local Coqui TTS model for audio generation")
+            tts_model.tts_to_file(text=transcript, file_path=str(response_audio_path))
+            print(f"Local TTS completed: {response_audio_path}")
+            
+        except Exception as e:
+            return jsonify({
+                "error": "Failed to generate audio with local TTS model.", 
+                "transcript": transcript,  # Vẫn trả về transcript để user biết
+                "details": str(e)
+            }), 500
+
+        # Gửi file audio phản hồi về client với thông tin transcript
+        response = send_file(response_audio_path, as_attachment=True, download_name='test_response.wav', mimetype='audio/wav')
+        response.headers['X-Transcript'] = transcript  # Thêm transcript vào header
+        response.headers['X-Model-Used'] = 'Local-STT-TTS'  # Thông báo model được sử dụng
+        return response
+
+    except Exception as e:
+        print(f"Error in /test_local_tts_stt endpoint: {e}")
+        return jsonify({'error': "An internal server error occurred."}), 500
+    finally:
+        # Dọn dẹp file âm thanh tạm thời
+        if converted_audio_path and converted_audio_path.exists():
+            try:
+                converted_audio_path.unlink()
+                print(f"Deleted converted audio file: {converted_audio_path}")
+            except OSError as e:
+                print(f"Error deleting converted file {converted_audio_path}: {e}")
+
+@app.route('/test_local_tts_stt_stream', methods=['POST'])
+def test_local_tts_stt_stream():
+    """API test streaming cho TTS và STT local - không sử dụng OpenAI API."""
+    
+    def generate_streaming_test_response():
+        temp_audio_path = None
+        converted_audio_path = None
+        response_audio_path = None
+        
+        try:
+            # Bước 1: Validate và xử lý file audio
+            if 'audio' not in request.files:
+                yield f"data: {json.dumps({'error': 'No audio file part in the request'})}\n\n"
+                return
+
+            audio_file = request.files['audio']
+            if audio_file.filename == '':
+                yield f"data: {json.dumps({'error': 'No selected audio file'})}\n\n"
+                return
+
+            # Gửi thông báo bắt đầu
+            yield f"data: {json.dumps({'step': 'start', 'message': 'Testing local TTS/STT models', 'status': 'processing'})}\n\n"
+
+            # Lưu file âm thanh tạm thời
+            temp_audio_path = Path(__file__).parent / f"temp_voice_{os.urandom(8).hex()}.webm"
+            audio_file.save(temp_audio_path)
+
+            # Chuyển đổi file âm thanh sang định dạng mp3
+            converted_audio_path = temp_audio_path.with_suffix('.mp3')
+            try:
+                audio = AudioSegment.from_file(temp_audio_path)
+                audio.export(converted_audio_path, format="mp3")
+            except Exception as e:
+                print(f"Error converting audio: {e}")
+                yield f"data: {json.dumps({'error': 'Failed to convert audio file'})}\n\n"
+                return
+            finally:
+                # Xóa file âm thanh tạm thời ban đầu
+                if temp_audio_path and temp_audio_path.exists():
+                    temp_audio_path.unlink()
+
+            # Bước 2: Chuyển đổi audio sang text (Speech-to-Text) - CHỈ DÙNG LOCAL
+            try:
+                if whisper_model is None:
+                    yield f"data: {json.dumps({'error': 'Local Whisper model not available'})}\n\n"
+                    return
+                
+                yield f"data: {json.dumps({'step': 'stt', 'message': 'Converting speech to text using local Whisper', 'status': 'processing'})}\n\n"
+                
+                # Sử dụng Whisper local
+                result = whisper_model.transcribe(str(converted_audio_path))
+                transcript = result["text"]
+                print(f"Local STT completed: {transcript}")
+                
+                # Gửi transcript ngay lập tức đến frontend
+                yield f"data: {json.dumps({'step': 'stt_result', 'transcript': transcript, 'model': 'Local Whisper', 'status': 'completed'})}\n\n"
+                
+            except Exception as e:
+                yield f"data: {json.dumps({'error': 'Failed to transcribe audio with local model'})}\n\n"
+                return
+
+            # Bước 3: Chuyển đổi transcript thành audio (Text-to-Speech) - CHỈ DÙNG LOCAL
+            try:
+                if tts_model is None:
+                    yield f"data: {json.dumps({'error': 'Local TTS model not available'})}\n\n"
+                    return
+                
+                yield f"data: {json.dumps({'step': 'tts', 'message': 'Converting text to speech using local Coqui TTS', 'status': 'processing'})}\n\n"
+                
+                # Tạo filename unique để tránh conflict
+                filename = f"test_tts_response_{os.urandom(4).hex()}.wav"
+                response_audio_path = Path(__file__).parent / filename
+                
+                # Sử dụng Coqui TTS local
+                tts_model.tts_to_file(text=transcript, file_path=str(response_audio_path))
+                print(f"Local TTS completed: {response_audio_path}")
+                
+                # Gửi đường dẫn audio file
+                yield f"data: {json.dumps({'step': 'tts_result', 'audio_file': filename, 'model': 'Local Coqui TTS', 'status': 'completed'})}\n\n"
+                
+            except Exception as e:
+                yield f"data: {json.dumps({'step': 'tts_error', 'error': 'Failed to generate audio with local TTS', 'transcript': transcript})}\n\n"
+                return
+
+            # Gửi signal hoàn thành
+            yield f"data: {json.dumps({'step': 'completed', 'message': 'Local TTS/STT test completed successfully', 'transcript': transcript, 'audio_file': filename, 'status': 'finished'})}\n\n"
+
+        except Exception as e:
+            print(f"Error in /test_local_tts_stt_stream endpoint: {e}")
+            yield f"data: {json.dumps({'error': 'An internal server error occurred'})}\n\n"
+        finally:
+            # Dọn dẹp file âm thanh tạm thời
+            if converted_audio_path and converted_audio_path.exists():
+                try:
+                    converted_audio_path.unlink()
+                    print(f"Deleted converted audio file: {converted_audio_path}")
+                except OSError as e:
+                    print(f"Error deleting converted file {converted_audio_path}: {e}")
+
+@app.route('/process_audio_local', methods=['POST'])
+def process_audio_local():
+    """
+    Production endpoint for interview audio processing.
+    This endpoint converts audio to text using local STT, generates AI interview response using OpenAI, 
+    then converts the AI response to audio using local TTS.
+    """
+    global messages  # Access global messages for interview conversation
+    temp_audio_path = None
+    converted_audio_path = None
+    response_audio_path = None
+    
+    try:
+        # Bước 1: Validate và xử lý file audio
+        print(f"DEBUG: Received request with files: {list(request.files.keys())}")
+        if 'audio' not in request.files:
+            print("DEBUG: No 'audio' key in request.files")
+            return jsonify({"error": "No audio file part in the request"}), 400
+
+        audio_file = request.files['audio']
+        print(f"DEBUG: Audio file name: {audio_file.filename}")
+        if audio_file.filename == '':
+            print("DEBUG: Empty audio file name")
+            return jsonify({"error": "No selected audio file"}), 400
+
+        # Lưu file âm thanh tạm thời
+        temp_audio_path = Path(__file__).parent / f"temp_voice_{os.urandom(8).hex()}.webm"
+        audio_file.save(temp_audio_path)
+        print(f"DEBUG: Saved temp audio file: {temp_audio_path} (size: {temp_audio_path.stat().st_size} bytes)")
+
+        # Chuyển đổi file âm thanh sang định dạng mp3
+        converted_audio_path = temp_audio_path.with_suffix('.mp3')
+        try:
+            audio = AudioSegment.from_file(temp_audio_path)
+            print(f"DEBUG: Audio duration: {len(audio)}ms, sample rate: {audio.frame_rate}Hz")
+            audio.export(converted_audio_path, format="mp3")
+            print(f"DEBUG: Converted audio file: {converted_audio_path} (size: {converted_audio_path.stat().st_size} bytes)")
+        except Exception as e:
+            print(f"Error converting audio: {e}")
+            return jsonify({"error": "Failed to convert audio file."}), 500
+        finally:
+            # Xóa file âm thanh tạm thời ban đầu
+            if temp_audio_path.exists():
+                temp_audio_path.unlink()
+
+        # Bước 2: Chuyển đổi audio sang text (Speech-to-Text) sử dụng hàm process_speech_to_text
+        try:
+            print("DEBUG: Starting transcription process...")
+            transcript = process_speech_to_text(converted_audio_path)
+            transcript = transcript.strip()
+            print(f"DEBUG: Raw transcript: '{transcript}' (length: {len(transcript)})")
+            
+            if not transcript:
+                print("DEBUG: Empty transcript detected")
+                # Instead of returning 400, let's return a helpful message and continue with a default prompt
+                transcript = "I'm sorry, I couldn't hear what you said clearly. Could you please repeat that?"
+                print(f"DEBUG: Using fallback transcript: '{transcript}'")
+            
+            print(f"STT completed: {transcript}")
+        except Exception as e:
+            print(f"DEBUG: Exception during transcription: {e}")
+            return jsonify({"error": "Failed to transcribe audio.", "details": str(e)}), 500
+
+        # Bước 3: Tạo response text từ OpenAI (Interview AI response)
+        try:
+            # Thêm tin nhắn user vào history
+            messages.append({"role": "user", "content": transcript})
+            print("User message added to history for interview processing.")
+            
+            # Gọi OpenAI để lấy phản hồi interview
+            bot_response_text = generate_text()
+            print(f"AI Interview response generated: {bot_response_text[:100]}...")
+        except Exception as e:
+            return jsonify({"error": "Failed to generate AI interview response.", "details": str(e)}), 500
+
+        # Bước 4: Chuyển AI response text thành audio (Text-to-Speech) sử dụng hàm generate_audio
+        try:
+            print("🔊 Converting AI response to audio...")
+            # Tạo filename cụ thể
+            filename = "response_audio.wav"
+            response_audio_path = generate_audio(bot_response_text, filename)
+            
+            if not response_audio_path:
+                print("❌ Failed to generate audio for AI response")
+                return jsonify({
+                    "error": "Failed to generate audio response.", 
+                    "transcript": transcript,
+                    "ai_response": bot_response_text,
+                    "audio_error": "TTS generation failed"
+                }), 500
+            
+            print(f"✅ AI response audio generated: {response_audio_path}")
+            
+        except Exception as e:
+            print(f"❌ Error generating audio for AI response: {e}")
+            return jsonify({
+                "error": "Failed to generate audio with TTS model.", 
+                "transcript": transcript,
+                "ai_response": bot_response_text,
+                "details": str(e)
+            }), 500
+
+        # Lưu lịch sử chat
+        save_history_to_json(messages)
+
+        # Trả về audio file với thông tin trong header
+        response = send_file(response_audio_path, as_attachment=True, download_name='response_audio.wav', mimetype='audio/wav')
+        response.headers['X-Transcript'] = transcript
+        response.headers['X-AI-Response'] = bot_response_text[:500] + "..." if len(bot_response_text) > 500 else bot_response_text  # Truncate if too long
+        response.headers['X-Model-Used'] = 'STT-OpenAI-TTS'  # Updated model info
+        response.headers['X-Audio-File'] = 'response_audio.wav'  # Thêm header để frontend biết tên file
+        return response
+
+    except Exception as e:
+        print(f"Error in process_audio_local: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+    
+    finally:
+        # Dọn dẹp file âm thanh tạm thời
+        if converted_audio_path and converted_audio_path.exists():
+            try:
+                converted_audio_path.unlink()
+                print(f"Deleted converted audio file: {converted_audio_path}")
+            except OSError as e:
+                print(f"Error deleting converted file {converted_audio_path}: {e}")
+        
+        # Không xóa response_audio_path ngay để frontend có thể truy cập
+        # File sẽ được overwrite ở lần chạy tiếp theo
+
+@app.route('/update_company_info', methods=['POST'])
+def update_company_info():
+    """Update company information from frontend form."""
+    global company_information, messages
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        # Update company information
+        company_information.update({
+            'company_name': data.get('companyName', ''),
+            'job_position': data.get('jobPosition', ''),
+            'company_field': data.get('companyField', ''),
+            'company_products': data.get('companyProducts', ''),
+            'company_culture': data.get('companyCulture', ''),
+            'other_info': data.get('otherInfo', '')
+        })
+
+        print(f"Company information updated: {company_information}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Company information updated successfully',
+            'company_info': company_information
+        })
+        
+    except Exception as e:
+        print(f"Error updating company info: {e}")
+        return jsonify({'error': 'Failed to update company information'}), 500
+
+@app.route('/update_personality_with_company_info', methods=['POST'])
+def update_personality_api():
+    """API endpoint to update chatbot personality with current company information and generate initial greeting."""
+    try:
+        # Call the personality update function (now includes OpenAI call and audio generation)
+        result = update_personality_with_company_info()
+        
+        if result.get('success'):
+            print("✅ Chatbot personality updated via API call with initial greeting")
+            
+            return jsonify({
+                'success': True,
+                'message': 'Chatbot personality updated successfully with initial greeting',
+                'company_info': company_information,
+                'has_company_info': bool(company_information.get('company_name')),
+                'greeting_text': result.get('greeting_text'),
+                'audio_file': result.get('audio_file'),
+                'audio_path': result.get('audio_path'),
+                'audio_error': result.get('audio_error')
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': result.get('error', 'Unknown error occurred')
+            }), 500
+        
+    except Exception as e:
+        print(f"Error updating personality: {e}")
+        return jsonify({'error': 'Failed to update chatbot personality'}), 500
+
+@app.route('/reset_session', methods=['POST'])
+def reset_session():
+    """Reset chat session and company information."""
+    global messages, company_information
+    
+    try:
+        # Reset company information to empty state
+        company_information = {
+            'company_name': '',
+            'job_position': '',
+            'company_field': '',
+            'company_products': '',
+            'company_culture': '',
+            'other_info': ''
+        }
+        
+        # Reset messages to initial state with system prompt
+        messages = [{"role": "system", "content": get_personality()}]
+        
+        print("Session reset successfully")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Session reset successfully'
+        })
+        
+    except Exception as e:
+        print(f"Error resetting session: {e}")
+        return jsonify({'error': 'Failed to reset session'}), 500
+
+@app.route('/get_company_info', methods=['GET'])
+def get_company_info():
+    """Get current company information status."""
+    global company_information
+    
+    try:
+        return jsonify({
+            'success': True,
+            'company_info': company_information,
+            'has_company_info': bool(company_information.get('company_name'))
+        })
+        
+    except Exception as e:
+        print(f"Error getting company info: {e}")
+        return jsonify({'error': 'Failed to get company information'}), 500
+
+@app.route('/get_system_prompt', methods=['GET'])
+def get_system_prompt():
+    """Get current system prompt for debugging."""
+    global messages
+    
+    try:
+        system_prompt = ""
+        if messages and messages[0]['role'] == 'system':
+            system_prompt = messages[0]['content']
+        
+        return jsonify({
+            'success': True,
+            'system_prompt': system_prompt,
+            'total_messages': len(messages)
+        })
+        
+    except Exception as e:
+        print(f"Error getting system prompt: {e}")
+        return jsonify({'error': 'Failed to get system prompt'}), 500
+
+def update_personality_with_company_info():
+    """Update the personality prompt with current company information and generate initial greeting with audio."""
+    global messages, cv
+    
+    # Create dynamic personality based on company information
+    if company_information.get('company_name'):
+        # Create completely new personality with dynamic company data
+        updated_personality = f"""
+You are a chatbot acting as a professional interviewer for {company_information.get('company_name', 'the company')}.
+
+**Context:**
+You are interviewing a candidate for the position of "{company_information.get('job_position', 'a role')}" at {company_information.get('company_name', 'this company')}.
+
+**Company Details (provided by candidate):**
+- Company Name: {company_information.get('company_name', 'Not specified')}
+- Job Position: {company_information.get('job_position', 'Not specified')}
+- Company Field: {company_information.get('company_field', 'Not specified')}
+- Company Products/Services: {company_information.get('company_products', 'Not specified')}
+- Company Culture: {company_information.get('company_culture', 'Not specified')}
+- Additional Information: {company_information.get('other_info', 'Not specified')}
+
+**Important Personality Rule**: After receiving each user response, you must:
+1. Implicitly score the answer internally (never reveal numerical scores during rounds 1-3)
+2. Generate smooth connecting commentary and evaluation
+3. Provide constructive feedback that relates to the role requirements
+4. Ask the next question in sequence according to the defined round structure
+5. Maintain natural conversation flow while strictly following the question count per round
+
+**Interview Structure:**
+**Interview Process (STRICTLY follow this structure):**
+
+1.  **Round 1: Personal Introduction (EXACTLY 2 questions)**
+    * Begin with a warm, personalized introduction focusing on the {company_information.get('job_position', 'position')} role at the {company_information.get('company_name', 'company')}.
+    * Ask EXACTLY 2 questions covering these key areas:
+        - Personal introduction and background (encourage them to share about themselves)
+        - Understanding of their strengths and areas for growth
+    * **After each answer**: 
+        - Provide encouraging, specific feedback that connects their responses to the role
+        - Implicitly score the answer internally (do not reveal scores to candidate)
+        - Generate smooth transition commentary and evaluation
+    * **Analysis Process**: Evaluate how their introduction and self-assessment relate to the {company_information.get('job_position', 'job position')} requirements.
+    * **Transition Rule**: After EXACTLY 2 questions and responses, naturally transition to Round 2 with connecting commentary.
+
+
+2.  **Round 2: Professional Knowledge & Company Fit (3 questions)**
+    * Ask exactly 3 questions about professional knowledge specifically related to:
+        - {company_information.get('company_field', 'the industry')} industry
+        - Skills needed for {company_information.get('job_position', 'this position')}
+        - Experience with {company_information.get('company_products', 'relevant products/services')}
+    * Test depth of understanding and evaluate how their skills match {company_information.get('company_name', 'the company')}'s needs.
+    * Provide feedback and advice for improvement after each answer.
+    * After 3 questions, move to Round 3.
+
+3.  **Round 3: Project Experience & Technical Deep Dive (4 questions)**
+    * Ask exactly 4 questions about projects and technical experience relevant to {company_information.get('company_field', 'this field')}.
+    * Focus on how their experience applies to {company_information.get('job_position', 'this position')}.
+    * Ask specific questions about:
+        - Technical expertise relevant to {company_information.get('company_products', 'the company\'s products')}
+        - Problem-solving approaches that would work at {company_information.get('company_name', 'this company')}
+        - Team collaboration and project management experience
+        - Challenges faced and solutions implemented in previous projects
+    * Provide detailed feedback and suggestions after each answer.
+    * After 4 questions, move to Round 4.
+
+4.  **Round 4: Summary & Scoring**
+    * Provide an implicit summary by naturally discussing the candidate's overall performance and fit for {company_information.get('job_position', 'the position')} at {company_information.get('company_name', 'the company')}.
+    * Give only a single overall score: **SCORE: X/10**
+    * Briefly mention key strengths and areas for improvement.
+    * Thank them for applying and inform about next steps.
+
+**Requirements:**
+* STRICTLY follow the question count for each round (2-3-4 questions).
+* Always reference {company_information.get('company_name', 'the company')} and {company_information.get('job_position', 'the position')} in your questions.
+* Tailor ALL technical questions to {company_information.get('company_field', 'the industry')}.
+* Evaluate cultural fit based on: {company_information.get('company_culture', 'the stated company culture')}.
+* Keep track of question count and announce when moving to next round.
+* Maintain a professional, friendly tone throughout.
+* Provide constructive feedback after each answer.
+* At the end, give a single overall score out of 10.
+
+**Candidate CV:** {cv}
+
+Please begin the interview with a warm greeting for the {company_information.get('job_position', 'position')} role at {company_information.get('company_name', 'the company')} and start Round 1 with the first personal introduction question!
+"""
+        
+        # Update the system message in the messages list
+        if messages and messages[0]['role'] == 'system':
+            messages[0]['content'] = updated_personality
+        else:
+            messages.insert(0, {"role": "system", "content": updated_personality})
+            
+        print("✅ Personality updated with dynamic company information:")
+        print(f"   Company: {company_information['company_name']}")
+        print(f"   Position: {company_information['job_position']}")
+        print(f"   Field: {company_information['company_field']}")
+        print(f"   Culture: {company_information['company_culture']}")
+        
+        # Gọi OpenAI để tạo câu chào đầu tiên và chuyển thành audio
+        try:
+            print("🤖 Generating initial interview greeting...")
+            
+            # Gọi OpenAI để tạo câu chào đầu tiên
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages
+            )
+            
+            initial_greeting = response.choices[0].message.content
+            print(f"📝 Initial greeting generated: {initial_greeting[:100]}...")
+            
+            # Thêm phản hồi của bot vào messages
+            messages.append({"role": "assistant", "content": initial_greeting})
+            
+            # Chuyển text thành audio sử dụng local TTS model
+            try:
+                print("🔊 Converting greeting to audio using local TTS...")
+                audio_filename = "interview_greeting.mp3"
+                audio_path = generate_audio(initial_greeting, audio_filename)
+                
+                if audio_path:
+                    print(f"✅ Interview greeting audio generated: {audio_path}")
+                    return {
+                        'greeting_text': initial_greeting,
+                        'audio_file': audio_filename,
+                        'audio_path': str(audio_path),
+                        'success': True
+                    }
+                else:
+                    print("❌ Failed to generate audio for greeting")
+                    return {
+                        'greeting_text': initial_greeting,
+                        'audio_file': None,
+                        'success': True,
+                        'audio_error': 'Failed to generate audio'
+                    }
+                    
+            except Exception as e:
+                print(f"❌ Error generating audio for greeting: {e}")
+                return {
+                    'greeting_text': initial_greeting,
+                    'audio_file': None,
+                    'success': True,
+                    'audio_error': str(e)
+                }
+                
+        except Exception as e:
+            print(f"❌ Error generating initial greeting: {e}")
+            return {
+                'success': False,
+                'error': f'Failed to generate initial greeting: {str(e)}'
+            }
+            
+    else:
+        print("❌ No company information available - using default personality")
+        # Reset to default personality if no company info
+        if messages and messages[0]['role'] == 'system':
+            messages[0]['content'] = get_personality()
+        else:
+            messages.insert(0, {"role": "system", "content": get_personality()})
+            
+        # Tạo câu chào mặc định cho trường hợp không có thông tin công ty
+        try:
+            print("🤖 Generating default interview greeting...")
+            
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages
+            )
+            
+            initial_greeting = response.choices[0].message.content
+            print(f"📝 Default greeting generated: {initial_greeting[:100]}...")
+            
+            # Thêm phản hồi của bot vào messages
+            messages.append({"role": "assistant", "content": initial_greeting})
+            
+            # Chuyển text thành audio
+            try:
+                print("🔊 Converting default greeting to audio...")
+                audio_filename = "interview_greeting.mp3"
+                audio_path = generate_audio(initial_greeting, audio_filename)
+                
+                if audio_path:
+                    print(f"✅ Default greeting audio generated: {audio_path}")
+                    return {
+                        'greeting_text': initial_greeting,
+                        'audio_file': audio_filename,
+                        'audio_path': str(audio_path),
+                        'success': True
+                    }
+                else:
+                    return {
+                        'greeting_text': initial_greeting,
+                        'audio_file': None,
+                        'success': True,
+                        'audio_error': 'Failed to generate audio'
+                    }
+                    
+            except Exception as e:
+                print(f"❌ Error generating audio for default greeting: {e}")
+                return {
+                    'greeting_text': initial_greeting,
+                    'audio_file': None,
+                    'success': True,
+                    'audio_error': str(e)
+                }
+                
+        except Exception as e:
+            print(f"❌ Error generating default greeting: {e}")
+            return {
+                'success': False,
+                'error': f'Failed to generate default greeting: {str(e)}'
+            }
+
+@app.route('/debug_company_info', methods=['GET'])
+def debug_company_info():
+    """Debug endpoint to check current company information and system prompt."""
+    global company_information, messages
+    
+    try:
+        system_prompt = ""
+        if messages and messages[0]['role'] == 'system':
+            system_prompt = messages[0]['content'][:800] + "..." if len(messages[0]['content']) > 800 else messages[0]['content']
+        
+        return jsonify({
+            'success': True,
+            'company_information': company_information,
+            'has_company_info': bool(company_information.get('company_name')),
+            'system_prompt_preview': system_prompt,
+            'total_messages': len(messages),
+            'personality_contains_company': company_information.get('company_name', '') in system_prompt if system_prompt else False
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+>>>>>>> Stashed changes
 # Add this after your other route definitions
 if __name__ == '__main__':
     # !!! Chế độ debug không phù hợp cho production
@@ -384,4 +1374,232 @@ if __name__ == '__main__':
     #          messages.insert(0, {"role": "system", "content": personality})
 
     print("Starting Flask app in debug mode...")
+<<<<<<< Updated upstream
+    app.run(debug=True, host='0.0.0.0', port=5000, ssl_context=('ssl/cert.pem', 'ssl/key.pem')) # Chạy trên tất cả interface, port 5000
+=======
     app.run(debug=True, host='0.0.0.0', port=5000) # Chạy trên tất cả interface, port 5000
+
+# --- Hàm Extract CV từ PDF ---
+
+def extract_text_from_pdf(pdf_file_path):
+    """Extract text from PDF file using PyMuPDF."""
+    try:
+        doc = fitz.open(pdf_file_path)
+        text = ""
+        
+        for page_num in range(len(doc)):
+            page = doc.load_page(page_num)
+            text += page.get_text()
+        
+        doc.close()
+        print(f"Successfully extracted text from PDF: {len(text)} characters")
+        return text
+    except Exception as e:
+        print(f"Error extracting text from PDF: {e}")
+        raise Exception("Failed to extract text from PDF")
+
+def analyze_cv_with_gpt(cv_text):
+    """Analyze CV text using GPT and return structured JSON."""
+    try:
+        prompt = f"""Analyze this CV into a JSON structure with three main sections: strengths and weaknesses, work experience (if available) or personal projects, and extracurricular activities.
+
+CV Content:
+{cv_text}
+
+Please provide a detailed analysis in the following JSON format:
+{{
+    "strengths_and_weaknesses": {{
+        "strengths": ["list of identified strengths"],
+        "weaknesses": ["list of potential areas for improvement"]
+    }},
+    "work_experience_or_projects": {{
+        "work_experience": [
+            {{
+                "position": "job title",
+                "company": "company name",
+                "duration": "time period",
+                "responsibilities": ["list of key responsibilities"],
+                "achievements": ["list of achievements"]
+            }}
+        ],
+        "personal_projects": [
+            {{
+                "project_name": "name",
+                "description": "brief description",
+                "technologies": ["technologies used"],
+                "outcomes": ["results or achievements"]
+            }}
+        ]
+    }},
+    "extracurricular_activities": [
+        {{
+            "activity": "activity name",
+            "role": "role or position",
+            "description": "brief description",
+            "skills_gained": ["skills or experiences gained"]
+        }}
+    ]
+}}
+
+Ensure the analysis is thorough, objective, and focuses on professional development potential."""
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        
+        analysis_result = response.choices[0].message.content
+        print("CV analysis completed successfully")
+        return analysis_result
+        
+    except Exception as e:
+        print(f"Error analyzing CV: {e}")
+        raise Exception("Failed to analyze CV")
+
+@app.route('/upload_cv', methods=['POST'])
+def upload_cv():
+    """Upload CV PDF file, extract text, and analyze with GPT."""
+    temp_pdf_path = None
+    
+    try:
+        # Validate file upload
+        if 'cv' not in request.files:
+            return jsonify({"error": "No CV file part in the request"}), 400
+
+        cv_file = request.files['cv']
+        if cv_file.filename == '':
+            return jsonify({"error": "No selected CV file"}), 400
+
+        # Check if file is PDF
+        if not cv_file.filename.lower().endswith('.pdf'):
+            return jsonify({"error": "Only PDF files are supported"}), 400
+
+        # Save temporary PDF file
+        temp_pdf_path = Path(__file__).parent / f"temp_cv_{os.urandom(8).hex()}.pdf"
+        cv_file.save(temp_pdf_path)
+        
+        # Extract text from PDF
+        try:
+            cv_text = extract_text_from_pdf(temp_pdf_path)
+            
+            if not cv_text.strip():
+                return jsonify({"error": "No text could be extracted from the PDF. Please ensure the PDF contains readable text."}), 400
+                
+        except Exception as e:
+            return jsonify({"error": "Failed to extract text from PDF", "details": str(e)}), 500
+
+        # Analyze CV with GPT
+        try:
+            analysis_result = analyze_cv_with_gpt(cv_text)
+            
+            # Try to parse as JSON to validate structure
+            try:
+                analysis_json = json.loads(analysis_result)
+            except json.JSONDecodeError:
+                # If not valid JSON, return as text
+                analysis_json = {"raw_analysis": analysis_result}
+            
+            return jsonify({
+                "status": "success",
+                "message": "CV uploaded and analyzed successfully",
+                "extracted_text": cv_text[:500] + "..." if len(cv_text) > 500 else cv_text,  # First 500 chars for preview
+                "analysis": analysis_json
+            })
+            
+        except Exception as e:
+            return jsonify({"error": "Failed to analyze CV", "details": str(e)}), 500
+
+    except Exception as e:
+        print(f"Error in /upload_cv endpoint: {e}")
+        return jsonify({'error': "An internal server error occurred."}), 500
+    finally:
+        # Clean up temporary PDF file
+        if temp_pdf_path and temp_pdf_path.exists():
+            try:
+                temp_pdf_path.unlink()
+                print(f"Deleted temporary PDF file: {temp_pdf_path}")
+            except OSError as e:
+                print(f"Error deleting temporary file {temp_pdf_path}: {e}")
+
+@app.route('/update_cv_info', methods=['POST'])
+def update_cv_info():
+    """Update CV information in the interview system."""
+    global messages, cv
+    
+    try:
+        cv_analysis = request.json.get('cv_analysis')
+        if not cv_analysis:
+            return jsonify({"error": "No CV analysis data provided"}), 400
+
+        # Update the global cv variable with the analyzed data
+        cv = json.dumps(cv_analysis, indent=2, ensure_ascii=False)
+        
+        # Update the system message to include the new CV information
+        new_personality = f"""
+You are a chatbot acting as a professional interviewer for a company.
+**Context:**
+
+* You are provided with the candidate's CV and may receive specific company information during the interview process.
+* Your task is to analyze the CV and available company information to ask relevant interview questions, assessing the candidate's skills and experience against job requirements.
+* When company information is provided, tailor your questions specifically to that company's field, culture, and position requirements.
+
+**Interview Process:**
+
+1.  **Round 1: Personal Introduction (warm-up)**
+    * Ask an open-ended question for the candidate to introduce themselves (not directly related to professional skills).
+        * Example: "Could you share a bit about your hobbies or extracurricular activities?"
+    * Ask 1-2 follow-up questions to understand the candidate's personality and motivation better.
+    * Record the answers and provide brief, encouraging feedback.
+    * Analyze the answer, make comments, and give advice to the user to improve their answer (if needed).
+2.  **Round 2: Basic Professional Knowledge**
+    * Based on the job description and company information (if available), ask 2 questions about basic professional knowledge related to the position.
+    * Ask 1-2 follow-up questions for each main question to test the candidate's depth of understanding.
+    * Record the answers.
+    * Analyze the answer, explain again if the user answer is wrong, and give advice to the user to improve their answer.
+3.  **Round 3: Project Experience**
+    * Ask the candidate to describe in detail the projects they have participated in (based on the CV).
+    * Ask deeper questions to understand:
+        * What were the candidate's roles in the projects?
+        * Which teams did the candidate work with?
+        * Detailed analysis of the technical expertise used in the projects.
+        * How their project experience relates to the target company and position (if company info is available).
+    * Ask related questions to understand the candidate's approach and problem-solving skills in the projects.
+    * Record the answers, analyze, and provide feedback/advice.
+4.  **Conclusion:**
+    * After each candidate's answer, ask the next question to continue the interview process smoothly.
+    * Finish the interview, thank the user, and inform the next steps.
+
+**Requirements:**
+
+* Maintain a professional, friendly, and objective attitude throughout the interview.
+* Analyze information from the CV and any available company information to ask relevant and specific questions.
+* When company information is available, customize questions to match the company's field, culture, and specific position requirements.
+* Record and organize the candidate's answers clearly (by appending to our message history).
+* Provide constructive feedback after each round or key answer.
+* Ask probing questions to check the user's depth of knowledge and problem-solving abilities.
+* Always require the user to answer in detail and clearly. Encourage elaboration.
+* Start the conversation with a greeting and the first warm-up question.
+
+**Additional Information:**
+
+* Candidate CV Analysis: {cv}
+* Default Job description: {job_details}
+
+Note: Additional company-specific information may be provided during the interview process to create more personalized questions.
+
+Please begin the interview! Good luck! :)
+"""
+        
+        # Reset messages with updated CV information
+        messages = [{"role": "system", "content": new_personality}]
+        
+        print("CV information updated in interview system")
+        return jsonify({
+            "status": "success",
+            "message": "CV information updated successfully in the interview system"
+        })
+
+    except Exception as e:
+        print(f"Error in /update_cv_info endpoint: {e}")
+        return jsonify({'error': "An internal server error occurred."}), 500
+>>>>>>> Stashed changes

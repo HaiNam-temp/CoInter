@@ -1,0 +1,9 @@
+flask
+flask-cors
+python-dotenv
+openai
+pydub
+openai-whisper
+torch
+torchvision
+torchaudio

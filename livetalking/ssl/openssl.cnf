@@ -1,0 +1,15 @@
+[ req ]
+default_bits       = 2048
+default_md         = sha256
+default_keyfile    = key.pem
+prompt             = no
+encrypt_key        = no
+distinguished_name = dn
+
+[ dn ]
+C = VN
+ST = Hanoi
+L = Hanoi
+O = My Company
+OU = Dev
+CN = 192.168.1.15

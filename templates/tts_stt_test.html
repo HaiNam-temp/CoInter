@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local TTS/STT Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            margin-bottom: 40px;
+            padding: 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+        }
+        .test-section h2 {
+            color: #555;
+            margin-top: 0;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 10px 5px;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .recording {
+            background-color: #dc3545 !important;
+        }
+        .recording:hover {
+            background-color: #c82333 !important;
+        }
+        .status {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .status.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            border-left: 4px solid #007bff;
+        }
+        .transcript {
+            font-style: italic;
+            color: #666;
+            margin: 10px 0;
+        }
+        .model-info {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+        }
+        audio {
+            width: 100%;
+            margin-top: 10px;
+        }
+        .stream-log {
+            height: 200px;
+            overflow-y: auto;
+            background-color: #1e1e1e;
+            color: #fff;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+        .log-entry {
+            margin-bottom: 5px;
+        }
+        .log-timestamp {
+            color: #888;
+        }
+        .log-step {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        .log-error {
+            color: #f44336;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 Local TTS/STT Test Interface</h1>
+        <p style="text-align: center; color: #666;">Test local Speech-to-Text and Text-to-Speech models without OpenAI API</p>
+
+        <!-- Standard Test Section -->
+        <div class="test-section">
+            <h2>📋 Standard Test (Single Response)</h2>
+            <p>Record audio, convert to text using local Whisper, then convert back to audio using local Coqui TTS.</p>
+            
+            <button id="recordBtn1" onclick="toggleRecording('standard')">🎤 Start Recording</button>
+            <button id="testBtn1" onclick="testLocalTTS()" disabled>🧪 Test Local TTS/STT</button>
+            
+            <div id="status1" class="status" style="display: none;"></div>
+            
+            <div id="result1" class="result" style="display: none;">
+                <h4>📝 Results:</h4>
+                <div id="transcript1" class="transcript"></div>
+                <div id="modelInfo1" class="model-info"></div>
+                <audio id="resultAudio1" controls style="display: none;"></audio>
+            </div>
+        </div>
+
+        <!-- Streaming Test Section -->
+        <div class="test-section">
+            <h2>🌊 Streaming Test (Real-time Updates)</h2>
+            <p>Same functionality but with real-time progress updates via Server-Sent Events.</p>
+            
+            <button id="recordBtn2" onclick="toggleRecording('streaming')">🎤 Start Recording</button>
+            <button id="testBtn2" onclick="testLocalTTSStream()" disabled>🌊 Test Streaming TTS/STT</button>
+            
+            <div id="status2" class="status" style="display: none;"></div>
+            
+            <div id="result2" class="result" style="display: none;">
+                <h4>📝 Results:</h4>
+                <div id="transcript2" class="transcript"></div>
+                <div id="modelInfo2" class="model-info"></div>
+                <audio id="resultAudio2" controls style="display: none;"></audio>
+            </div>
+
+            <div id="streamLog" class="stream-log" style="display: none;">
+                <h4 style="color: #fff; margin-top: 0;">📊 Stream Log:</h4>
+                <div id="logContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let currentRecordingType = null;
+
+        async function toggleRecording(type) {
+            currentRecordingType = type;
+            const recordBtn = document.getElementById(`recordBtn${type === 'standard' ? '1' : '2'}`);
+            const testBtn = document.getElementById(`testBtn${type === 'standard' ? '1' : '2'}`);
+            
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                // Stop recording
+                mediaRecorder.stop();
+                recordBtn.textContent = '🎤 Start Recording';
+                recordBtn.classList.remove('recording');
+            } else {
+                // Start recording
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    audioChunks = [];
+                    
+                    mediaRecorder = new MediaRecorder(stream);
+                    mediaRecorder.ondataavailable = event => {
+                        audioChunks.push(event.data);
+                    };
+                    
+                    mediaRecorder.onstop = () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        testBtn.disabled = false;
+                        testBtn.audioBlob = audioBlob;
+                        stream.getTracks().forEach(track => track.stop());
+                    };
+                    
+                    mediaRecorder.start();
+                    recordBtn.textContent = '⏹️ Stop Recording';
+                    recordBtn.classList.add('recording');
+                    testBtn.disabled = true;
+                } catch (error) {
+                    showStatus(type, 'error', 'Error accessing microphone: ' + error.message);
+                }
+            }
+        }
+
+        async function testLocalTTS() {
+            const testBtn = document.getElementById('testBtn1');
+            const audioBlob = testBtn.audioBlob;
+            
+            if (!audioBlob) {
+                showStatus('standard', 'error', 'No audio recorded!');
+                return;
+            }
+
+            showStatus('standard', 'info', 'Testing local TTS/STT models...');
+            testBtn.disabled = true;
+
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'test_audio.webm');
+
+            try {
+                const response = await fetch('/test_local_tts_stt', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const transcript = response.headers.get('X-Transcript');
+                    const modelUsed = response.headers.get('X-Model-Used');
+                    
+                    showStatus('standard', 'success', 'Local TTS/STT test completed successfully!');
+                    showResult('standard', transcript, modelUsed);
+                    
+                    // Play the audio
+                    const audioBlob = await response.blob();
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    const audio = document.getElementById('resultAudio1');
+                    audio.src = audioUrl;
+                    audio.style.display = 'block';
+                } else {
+                    const errorData = await response.json();
+                    showStatus('standard', 'error', 'Error: ' + (errorData.error || 'Unknown error'));
+                    if (errorData.transcript) {
+                        showResult('standard', errorData.transcript, 'Partial - STT only');
+                    }
+                }
+            } catch (error) {
+                showStatus('standard', 'error', 'Network error: ' + error.message);
+            }
+
+            testBtn.disabled = false;
+        }
+
+        async function testLocalTTSStream() {
+            const testBtn = document.getElementById('testBtn2');
+            const audioBlob = testBtn.audioBlob;
+            
+            if (!audioBlob) {
+                showStatus('streaming', 'error', 'No audio recorded!');
+                return;
+            }
+
+            showStatus('streaming', 'info', 'Starting streaming TTS/STT test...');
+            testBtn.disabled = true;
+            
+            // Show stream log
+            const streamLog = document.getElementById('streamLog');
+            const logContent = document.getElementById('logContent');
+            streamLog.style.display = 'block';
+            logContent.innerHTML = '';
+
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'test_audio.webm');
+
+            try {
+                const response = await fetch('/test_local_tts_stt_stream', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+
+                    for (let line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                handleStreamData(data);
+                            } catch (e) {
+                                console.error('Failed to parse JSON:', e);
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                showStatus('streaming', 'error', 'Network error: ' + error.message);
+                addLogEntry('error', 'Network error: ' + error.message);
+            }
+
+            testBtn.disabled = false;
+        }
+
+        function handleStreamData(data) {
+            const timestamp = new Date().toLocaleTimeString();
+            
+            if (data.error) {
+                showStatus('streaming', 'error', 'Error: ' + data.error);
+                addLogEntry('error', `${data.error}`);
+            } else if (data.step) {
+                switch (data.step) {
+                    case 'start':
+                        addLogEntry('info', `${data.message}`);
+                        break;
+                    case 'stt':
+                        addLogEntry('step', `STT: ${data.message}`);
+                        break;
+                    case 'stt_result':
+                        addLogEntry('success', `STT completed using ${data.model}`);
+                        addLogEntry('info', `Transcript: "${data.transcript}"`);
+                        showResult('streaming', data.transcript, data.model);
+                        break;
+                    case 'tts':
+                        addLogEntry('step', `TTS: ${data.message}`);
+                        break;
+                    case 'tts_result':
+                        addLogEntry('success', `TTS completed using ${data.model}`);
+                        addLogEntry('info', `Audio file: ${data.audio_file}`);
+                        
+                        // Load and play the audio
+                        fetch(`/download_audio/${data.audio_file}`)
+                            .then(response => response.blob())
+                            .then(audioBlob => {
+                                const audioUrl = URL.createObjectURL(audioBlob);
+                                const audio = document.getElementById('resultAudio2');
+                                audio.src = audioUrl;
+                                audio.style.display = 'block';
+                            });
+                        break;
+                    case 'completed':
+                        showStatus('streaming', 'success', 'Streaming test completed successfully!');
+                        addLogEntry('success', `✅ ${data.message}`);
+                        break;
+                    case 'tts_error':
+                        showStatus('streaming', 'error', 'TTS Error: ' + data.error);
+                        addLogEntry('error', `TTS Error: ${data.error}`);
+                        if (data.transcript) {
+                            showResult('streaming', data.transcript, 'Partial - STT only');
+                        }
+                        break;
+                }
+            }
+        }
+
+        function addLogEntry(type, message) {
+            const logContent = document.getElementById('logContent');
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            
+            let colorClass = '';
+            switch (type) {
+                case 'error': colorClass = 'log-error'; break;
+                case 'step': colorClass = 'log-step'; break;
+                case 'success': colorClass = 'log-step'; break;
+                default: colorClass = '';
+            }
+            
+            entry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span> <span class="${colorClass}">${message}</span>`;
+            logContent.appendChild(entry);
+            logContent.scrollTop = logContent.scrollHeight;
+        }
+
+        function showStatus(type, statusType, message) {
+            const statusDiv = document.getElementById(`status${type === 'standard' ? '1' : '2'}`);
+            statusDiv.style.display = 'block';
+            statusDiv.className = `status ${statusType}`;
+            statusDiv.textContent = message;
+        }
+
+        function showResult(type, transcript, modelInfo) {
+            const resultDiv = document.getElementById(`result${type === 'standard' ? '1' : '2'}`);
+            const transcriptDiv = document.getElementById(`transcript${type === 'standard' ? '1' : '2'}`);
+            const modelInfoDiv = document.getElementById(`modelInfo${type === 'standard' ? '1' : '2'}`);
+            
+            resultDiv.style.display = 'block';
+            transcriptDiv.textContent = `"${transcript}"`;
+            modelInfoDiv.textContent = `Model used: ${modelInfo}`;
+        }
+    </script>
+</body>
+</html>

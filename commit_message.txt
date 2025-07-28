@@ -1,0 +1,3 @@
+feat: Add project documentation and run scripts
+
+This commit introduces the initial README.md file, providing a comprehensive overview of the project, including setup instructions and usage details. It also adds start.sh and start.bat scripts to simplify the process of running the frontend and backend servers for both Windows and Unix-based systems.

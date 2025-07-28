@@ -42,6 +42,28 @@ const Meets: React.FC = () => {
     }
   }, [currentStep]);
 
+  // Reset session when component mounts
+  useEffect(() => {
+    const resetSession = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/reset_session', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        if (response.ok) {
+          console.log('Session reset successfully');
+        }
+      } catch (error) {
+        console.error('Error resetting session:', error);
+      }
+    };
+    
+    resetSession();
+  }, []);
+
   // Handle file selection
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -115,7 +137,7 @@ const Meets: React.FC = () => {
   };
 
   // Handle company info submission
-  const handleCompanyInfoSubmit = (e: React.FormEvent) => {
+  const handleCompanyInfoSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!companyName || !jobPosition || !companyField) {
@@ -124,12 +146,69 @@ const Meets: React.FC = () => {
     }
     
     setIsLoading(true);
+    setError('');
     
-    // Simulating API call with a timeout
-    setTimeout(() => {
+    try {
+      // Log dữ liệu sẽ được gửi để debug
+      const companyData = {
+        companyName,
+        jobPosition,
+        companyField,
+        companyProducts,
+        companyCulture,
+        otherInfo
+      };
+      console.log('Sending company data to backend:', companyData);
+      
+      // Gửi thông tin công ty đến backend và cập nhật personality chatbot
+      const response = await fetch('http://localhost:5000/update_company_info', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(companyData),
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        console.log('✅ Company information updated successfully:', data.company_info);
+        console.log('✅ Chatbot personality updated for interview with:', companyName);
+        
+        // Gọi API để cập nhật personality chatbot
+        try {
+          const personalityResponse = await fetch('http://localhost:5000/update_personality_with_company_info', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+          
+          const personalityData = await personalityResponse.json();
+          
+          if (personalityResponse.ok && personalityData.success) {
+            console.log('✅ Chatbot personality updated successfully via API');
+          } else {
+            console.warn('⚠️ Warning: Personality update failed, but continuing...');
+          }
+        } catch (personalityError) {
+          console.error('❌ Error calling personality update API:', personalityError);
+          // Không throw error để không block flow chính
+        }
+        
+        // Thêm delay nhỏ để đảm bảo backend đã xử lý xong
+        setTimeout(() => {
+          goToNextStep();
+        }, 500);
+      } else {
+        setError(data.error || 'Có lỗi xảy ra khi cập nhật thông tin công ty');
+      }
+    } catch (error) {
+      console.error('❌ Error updating company info:', error);
+      setError('Không thể kết nối đến server. Vui lòng thử lại.');
+    } finally {
       setIsLoading(false);
-      goToNextStep();
-    }, 1500);
+    }
   };
 
   // Start the meeting
