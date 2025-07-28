@@ -70,7 +70,7 @@ api_key = os.getenv("OPEN_AI_KEY")
 <<<<<<< Updated upstream
 client = OpenAI(api_key=api_key)
 =======
-client = OpenAI(api_key="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")
+client = OpenAI(api_key="")
 >>>>>>> Stashed changes
 
 # --- Dữ Liệu CV và Job Details ---
