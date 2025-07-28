@@ -67,11 +67,7 @@ api_key = os.getenv("OPEN_AI_KEY")
 
 
 # --- Khởi Tạo OpenAI Client ---
-<<<<<<< Updated upstream
-client = OpenAI(api_key=api_key)
-=======
 client = OpenAI(api_key="")
->>>>>>> Stashed changes
 
 # --- Dữ Liệu CV và Job Details ---
 company_information = {
